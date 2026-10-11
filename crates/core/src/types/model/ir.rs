@@ -13,6 +13,9 @@ pub enum PrintingIR {
     DisableSteppers,
     EnableSteppers,
     SetStepperCurrent(u16),
+
+    // Service commands
+    ForceErr(String),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -62,6 +65,7 @@ impl fmt::Display for PrintingIR {
             PrintingIR::DisableSteppers => write!(f, "disabling stepper"),
             PrintingIR::EnableSteppers => write!(f, "enabling stepper"),
             PrintingIR::SetStepperCurrent(c) => write!(f, "setting stepper current to {c}mA"),
+            PrintingIR::ForceErr(e) => write!(f, "Force error called: {e}"),
         }
     }
 }
@@ -108,6 +112,8 @@ impl TimedIR {
             | PrintingIR::DisableSteppers
             | PrintingIR::SetStepperCurrent(_)
             | PrintingIR::ShowImage(_) => Duration::from_millis(200),
+
+            PrintingIR::ForceErr(_) => Duration::ZERO,
         }
     }
 }

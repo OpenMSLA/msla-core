@@ -70,6 +70,11 @@ impl GCodeParser {
                     self.parse_m106(parts);
                 },
 
+                // Force error
+                "M488" => {
+                    self.parse_m488(parts);
+                },
+
                 // Stepper current
                 "M906" => {
                     self.parse_m906(parts);
@@ -154,6 +159,30 @@ impl GCodeParser {
         {
             self.ir.push(PrintingIR::TurnUV(power > 0.0).to_timed_ir());
         }
+
+        true
+    }
+
+    /// Forcing the printer into an error state
+    fn parse_m488(&mut self, mut iter: SplitWhitespace) -> bool {
+        let Some(first) = iter.next() else {
+            return false;
+        };
+
+        let mut message_parts = vec![first];
+        if first.starts_with("\"") {
+            while let Some(part) = iter.next() {
+                message_parts.push(part);
+                if part.ends_with("\"") {
+                    break;
+                }
+            }
+        }
+
+        self.ir.push(
+            PrintingIR::ForceErr(message_parts.join(" ").trim_matches('"').to_owned())
+                .to_timed_ir(),
+        );
 
         true
     }

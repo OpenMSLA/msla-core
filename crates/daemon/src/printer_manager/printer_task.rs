@@ -83,7 +83,9 @@ impl PrinterTask {
             tokio::select! {
                 result = self.execute_next_step(command.ir) => {
                     if let Err(e) = result {
-                        self.state = PrinterState::Error(e)
+                        self.state = PrinterState::Error(e);
+                        self.send_current_status().await;
+                        return;
                     }
 
                 }
@@ -172,6 +174,10 @@ impl PrinterTask {
                     .set_motor_current(current)
                     .await
                     .map_err(|e| PrintingError::new(format!("Cannot set stepper current: {e}")))?;
+            },
+            PrintingIR::ForceErr(e) => {
+                debug!("Called force error: {e}");
+                return Err(PrintingError::new(e));
             },
         }
 
