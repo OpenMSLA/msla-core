@@ -33,19 +33,26 @@ async fn get_device_list(path: &PathBuf, re: &Regex) -> Result<HashSet<PathBuf>>
 }
 
 /// Checks if the provided folder is already mounted
-async fn is_mount_folder(folder: &PathBuf) -> bool {
-    let res = Command::new("mountpoint")
+async fn is_mount_folder(folder: &PathBuf) -> Option<PathBuf> {
+    let res = Command::new("findmnt")
+        .arg("-no")
+        .arg("SOURCE")
         .arg(folder)
-        .arg("-q")
         .output()
         .await;
 
     match res {
-        Ok(o) => o.status.code() == Some(0),
+        Ok(o) if o.status.success() => {
+            let output = String::from_utf8_lossy(&o.stdout).into_owned();
+            let dev = output.trim();
+            (!dev.is_empty()).then(|| PathBuf::from(dev))
+        },
         Err(e) => {
             error!("Cannot check mountpoint: {e}");
-            return false;
+            return None;
         },
+
+        _ => None,
     }
 }
 
@@ -59,7 +66,7 @@ async fn get_free_mount_folder(
 
     loop {
         let s = mount_path.join(format!("part{x}"));
-        if !values.contains(&s) && !is_mount_folder(&s).await {
+        if !values.contains(&s) && is_mount_folder(&s).await.is_none() {
             return s;
         }
 
@@ -143,6 +150,25 @@ pub async fn start_usb_service() -> Result<()> {
 
     // Detected devices at last check
     let mut last_connected_devices: HashSet<PathBuf> = HashSet::new();
+
+    let mut already_mounted = fs::read_dir(&config.usb_controller.mount_point).await?;
+    while let Some(dir) = already_mounted.next_entry().await? {
+        if let Some(dev) = is_mount_folder(&dir.path()).await {
+            info!(
+                "Found already mounted device: {:?} -> {:?}",
+                dev,
+                dir.path()
+            );
+
+            partitions_table.insert(dev.clone(), dir.path());
+            last_connected_devices.insert(dev);
+        } else {
+            match fs::remove_dir_all(dir.path()).await {
+                Ok(()) => info!("Removed unused mount folder: {:?}", dir.path()),
+                Err(e) => error!("Cannot delete mount folder: {e}"),
+            }
+        }
+    }
 
     loop {
         let found_dev = match get_device_list(&config.usb_controller.scan_path, &re).await {
