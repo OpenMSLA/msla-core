@@ -4,7 +4,7 @@ use crate::{
     uart::{Uart, packet::UARTPacket, uart_client::UARTClient},
 };
 use anyhow::{Result, anyhow};
-use msla_core::types::peripheral::{MovingZStatus, StepperPositioning};
+use msla_core::types::peripheral::StepperPositioning;
 use std::{sync::Arc, time::Duration};
 
 #[derive(Clone)]
@@ -47,7 +47,7 @@ impl PeripheralController {
         pos: f64,
         speed: f64,
         positioning: StepperPositioning,
-    ) -> Result<MovingZStatus> {
+    ) -> Result<()> {
         let mut buf: Vec<u8> = Vec::new();
 
         buf.extend(pos.to_le_bytes());
@@ -67,12 +67,11 @@ impl PeripheralController {
             )
             .await?;
 
-        let status = match packet.read_u8() {
-            Some(0) => MovingZStatus::Success,
-            _ => MovingZStatus::Unknown,
-        };
-
-        Ok(status)
+        match packet.read_u8() {
+            Some(0) => Ok(()),
+            Some(n) => anyhow::bail!(format!("Peripheral returned error {n}")),
+            None => anyhow::bail!(format!("Peripheral returned unknown error")),
+        }
     }
 
     /// Turn UV backlight

@@ -1,8 +1,13 @@
 use anyhow::Result;
 use msla_core::config;
 use regex::Regex;
-use std::{collections::HashSet, path::PathBuf};
-use tokio::fs;
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+    time::Duration,
+};
+use tokio::{fs, process::Command, time::sleep};
+use tracing::{error, info, warn};
 
 /// Gets all device list, matching provided regex
 async fn get_device_list(path: &PathBuf, re: &Regex) -> Result<HashSet<PathBuf>> {
@@ -27,15 +32,171 @@ async fn get_device_list(path: &PathBuf, re: &Regex) -> Result<HashSet<PathBuf>>
     Ok(found_hashmap)
 }
 
+/// Checks if the provided folder is already mounted
+async fn is_mount_folder(folder: &PathBuf) -> bool {
+    let res = Command::new("mountpoint")
+        .arg(folder)
+        .arg("-q")
+        .output()
+        .await;
+
+    match res {
+        Ok(o) => o.status.code() == Some(0),
+        Err(e) => {
+            error!("Cannot check mountpoint: {e}");
+            return false;
+        },
+    }
+}
+
+/// Finds first available mount folder
+async fn get_free_mount_folder(
+    part_table: &HashMap<PathBuf, PathBuf>,
+    mount_path: &PathBuf,
+) -> PathBuf {
+    let mut x = 0;
+    let values: Vec<PathBuf> = part_table.values().cloned().collect();
+
+    loop {
+        let s = mount_path.join(format!("part{x}"));
+        if !values.contains(&s) && !is_mount_folder(&s).await {
+            return s;
+        }
+
+        x += 1;
+    }
+}
+
+/// Calls `blkid` command and returns true, if there is a fs
+async fn check_fs_existence(dev: &PathBuf) -> bool {
+    let res = Command::new("blkid").arg(dev).output().await;
+
+    let output = match res {
+        Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).into_owned(),
+        Ok(out) => {
+            error!(
+                "Cannot check fs existence: {}",
+                String::from_utf8_lossy(&out.stderr)
+            );
+            return false;
+        },
+        Err(e) => {
+            error!("Cannot check fs existence: {e}");
+            return false;
+        },
+    };
+
+    let iter = output.split_whitespace();
+    for part in iter {
+        if part.starts_with("TYPE") {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Mount device to a folder
+async fn mount_device(dev: &PathBuf, path: &PathBuf) -> Result<()> {
+    // If mount path not exists - create
+    if !path.exists() {
+        fs::create_dir_all(&path).await?;
+    }
+
+    let res = Command::new("mount").arg(dev).arg(path).output().await?;
+
+    if !res.status.success() {
+        anyhow::bail!(
+            "Could not mount device: {}",
+            String::from_utf8_lossy(&res.stderr)
+        )
+    }
+
+    Ok(())
+}
+
+/// Unmount device
+async fn unmount_device(path: &PathBuf) -> Result<()> {
+    let res = Command::new("umount").arg(path).output().await?;
+    if !res.status.success() {
+        anyhow::bail!(
+            "Could not unmount device: {}",
+            String::from_utf8_lossy(&res.stderr)
+        )
+    }
+
+    // removes old dir
+    fs::remove_dir_all(path).await?;
+    Ok(())
+}
+
 /// Starts usb mounter service loop
 pub async fn start_usb_service() -> Result<()> {
     let config = config::get_config().await;
     let re = Regex::new(&config.usb_controller.usb_path_regex)?;
 
-    println!(
-        "S: {:?}",
-        get_device_list(&config.usb_controller.scan_path, &re).await,
-    );
+    let scan_duration = Duration::from_secs(config.usb_controller.scan_period as u64);
 
-    Ok(())
+    // dev path-to-mount folder table
+    // e.g. (/dev/sda1 -> part0)
+    let mut partitions_table: HashMap<PathBuf, PathBuf> = HashMap::new();
+
+    // Detected devices at last check
+    let mut last_connected_devices: HashSet<PathBuf> = HashSet::new();
+
+    loop {
+        let found_dev = match get_device_list(&config.usb_controller.scan_path, &re).await {
+            Ok(d) => d,
+            Err(e) => {
+                error!("Cannot scan device list: {e}");
+                sleep(scan_duration).await;
+
+                continue;
+            },
+        };
+
+        for added in found_dev.difference(&last_connected_devices) {
+            info!("Added device: {:?}", added);
+
+            if !check_fs_existence(added).await {
+                warn!("Filesystem on device {:?} not found! Skipping it...", added);
+                continue;
+            }
+
+            let free_mount_folder =
+                get_free_mount_folder(&partitions_table, &config.usb_controller.mount_point).await;
+
+            match mount_device(added, &free_mount_folder).await {
+                Ok(()) => {
+                    info!(
+                        "Mounted new usb device: {:?} -> {:?}",
+                        added, free_mount_folder
+                    );
+
+                    partitions_table.insert(added.to_path_buf(), free_mount_folder);
+                },
+                Err(e) => {
+                    error!("Cannot mount device {:?}: {e}", added)
+                },
+            }
+        }
+
+        for removed in last_connected_devices.difference(&found_dev) {
+            info!("Removed device: {:?}", removed);
+
+            match partitions_table.get(removed) {
+                Some(path) => {
+                    if let Err(e) = unmount_device(path).await {
+                        error!("Could not unmount folder: {e}");
+                    }
+
+                    partitions_table.remove(removed);
+                },
+                None => warn!("Device {:?} not mounted", removed),
+            }
+        }
+
+        last_connected_devices = found_dev;
+        sleep(scan_duration).await;
+    }
 }

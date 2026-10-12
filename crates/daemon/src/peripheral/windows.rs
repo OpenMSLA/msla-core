@@ -3,7 +3,7 @@
 /// FICTIVE WINDOWS REALIZATION
 use crate::{peripheral::PhysicalState, uart::packet::UARTPacket};
 use anyhow::Result;
-use msla_core::types::peripheral::{MovingZStatus, StepperPositioning};
+use msla_core::types::peripheral::StepperPositioning;
 
 #[derive(Clone)]
 pub struct PeripheralController {}
@@ -32,8 +32,8 @@ impl PeripheralController {
         _pos: f64,
         _speed: f64,
         _positioning: StepperPositioning,
-    ) -> Result<MovingZStatus> {
-        Ok(MovingZStatus::Success)
+    ) -> Result<()> {
+        Ok(())
     }
 
     /// Turn UV backlight
