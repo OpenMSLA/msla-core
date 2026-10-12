@@ -30,8 +30,8 @@ impl LCDController {
 
         info!(
             "LCD INIT: {} {}",
-            String::from_utf8_lossy(&o.stdout),
-            String::from_utf8_lossy(&o.stderr)
+            String::from_utf8_lossy(&o.stdout).trim(),
+            String::from_utf8_lossy(&o.stderr).trim()
         );
 
         sleep(Duration::from_secs(1)).await;
@@ -46,8 +46,8 @@ impl LCDController {
 
         info!(
             "LCD INIT: {} {}",
-            String::from_utf8_lossy(&o.stdout),
-            String::from_utf8_lossy(&o.stderr)
+            String::from_utf8_lossy(&o.stdout).trim(),
+            String::from_utf8_lossy(&o.stderr).trim()
         );
 
         let fb = Arc::new(OpenOptions::new().read(true).write(true).open("/dev/fb0")?);
