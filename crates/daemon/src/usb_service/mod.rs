@@ -1,12 +1,12 @@
 use anyhow::Result;
-use msla_core::config;
+use msla_core::{config, types::usb::UsbState};
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
     time::Duration,
 };
-use tokio::{fs, process::Command, time::sleep};
+use tokio::{fs, process::Command, sync::watch::Sender, time::sleep};
 use tracing::{error, info, warn};
 
 /// Gets all device list, matching provided regex
@@ -123,22 +123,28 @@ async fn mount_device(dev: &PathBuf, path: &PathBuf) -> Result<()> {
 }
 
 /// Unmount device
-async fn unmount_device(path: &PathBuf) -> Result<()> {
-    let res = Command::new("umount").arg(path).output().await?;
-    if !res.status.success() {
-        anyhow::bail!(
-            "Could not unmount device: {}",
-            String::from_utf8_lossy(&res.stderr)
-        )
+async fn unmount_device(path: &PathBuf) {
+    let res = Command::new("umount").arg(path).output().await;
+    match res {
+        Ok(o) => {
+            if !o.status.success() {
+                error!(
+                    "Could not unmount device: {}",
+                    String::from_utf8_lossy(&o.stderr)
+                )
+            }
+        },
+        Err(e) => error!("Error calling umount: {e}"),
     }
 
     // removes old dir
-    fs::remove_dir_all(path).await?;
-    Ok(())
+    if let Err(e) = fs::remove_dir_all(path).await {
+        error!("Could not delete old mount dir: {e}")
+    }
 }
 
 /// Starts usb mounter service loop
-pub async fn start_usb_service() -> Result<()> {
+pub async fn start_usb_service(sender: Sender<UsbState>) -> Result<()> {
     let config = config::get_config().await;
     let re = Regex::new(&config.usb_controller.usb_path_regex)?;
 
@@ -212,15 +218,25 @@ pub async fn start_usb_service() -> Result<()> {
 
             match partitions_table.get(removed) {
                 Some(path) => {
-                    if let Err(e) = unmount_device(path).await {
-                        error!("Could not unmount folder: {e}");
-                    }
-
+                    unmount_device(path).await;
                     partitions_table.remove(removed);
                 },
                 None => warn!("Device {:?} not mounted", removed),
             }
         }
+
+        let devices_len = found_dev.len();
+        let root_dir = if devices_len == 1 {
+            found_dev
+                .iter()
+                .next()
+                .and_then(|x| partitions_table.get(x).cloned())
+                .unwrap_or_else(|| config.usb_controller.mount_point.clone())
+        } else {
+            config.usb_controller.mount_point.clone()
+        };
+
+        let _ = sender.send(UsbState { root_dir });
 
         last_connected_devices = found_dev;
         sleep(scan_duration).await;

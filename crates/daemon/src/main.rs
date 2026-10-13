@@ -16,10 +16,7 @@ use std::{
 
 use anyhow::Result;
 use msla_core::{
-    config,
-    logging,
-    shutdown::shutdown_signal,
-    types::printer_manager::{PrinterCommand, PrinterState},
+    config, logging, shutdown::shutdown_signal, types::{printer_manager::{PrinterCommand, PrinterState}, usb::UsbState},
 };
 use tokio::sync::{Notify, mpsc, watch};
 use tracing::{Level, error, info};
@@ -72,6 +69,12 @@ async fn main() -> Result<()> {
     let fan_controller = peripheral_controller.clone();
     tokio::spawn(async { start_fan(fan_controller).await });
 
+    // Global printer state
+    let (usb_tx, usb_rx) = watch::channel(UsbState::default());
+
+    // Start usb mounter service task
+    tokio::spawn(async { start_usb_service(usb_tx).await });
+
     // Build and run REST API
     let rest = build_rest_api(
         SocketAddrV4::new(
@@ -96,9 +99,6 @@ async fn main() -> Result<()> {
         },
         Err(e) => error!("Display connection failed: {e}, starting without it..."),
     }
-
-    // Start usb mounter service task
-    tokio::spawn(async { start_usb_service().await });
 
     // Start broadcast server
     tokio::spawn(async { start_broadcast().await });
