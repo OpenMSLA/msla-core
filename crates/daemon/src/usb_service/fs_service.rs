@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 use tokio::{fs, sync::RwLock};
-use tracing::{debug, info};
+use tracing::info;
 
 type FSType = OnceLock<Arc<RwLock<UsbFilesystem>>>;
 static USB_FILESYSTEM: FSType = OnceLock::new();
@@ -20,11 +20,11 @@ pub struct UsbFilesystem {
     pub _inc: u16,
 }
 
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Clone)]
 pub enum FileEntryType {
     #[default]
-    File,
-    Dir,
+    File = 0,
+    Dir = 1,
 }
 
 #[derive(Default, Debug)]

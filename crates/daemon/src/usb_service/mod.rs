@@ -3,7 +3,7 @@ use msla_core::config;
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::Duration,
 };
 use tokio::{fs, process::Command, time::sleep};
@@ -53,7 +53,7 @@ async fn is_mount_folder(folder: &PathBuf) -> Option<PathBuf> {
         },
         Err(e) => {
             error!("Cannot check mountpoint: {e}");
-            return None;
+            None
         },
 
         _ => None,
@@ -63,7 +63,7 @@ async fn is_mount_folder(folder: &PathBuf) -> Option<PathBuf> {
 /// Finds first available mount folder
 async fn get_free_mount_folder(
     part_table: &HashMap<PathBuf, PathBuf>,
-    mount_path: &PathBuf,
+    mount_path: &Path,
 ) -> PathBuf {
     let mut x = 0;
     let values: Vec<PathBuf> = part_table.values().cloned().collect();
@@ -149,6 +149,7 @@ async fn unmount_device(path: &PathBuf) {
 
 /// Starts usb mounter service loop
 pub async fn start_usb_service() -> Result<()> {
+    let mut dirty = false;
     let config = config::get_config().await;
     let re = Regex::new(&config.usb_controller.usb_path_regex)?;
 
@@ -173,6 +174,7 @@ pub async fn start_usb_service() -> Result<()> {
                 dir.path()
             );
 
+            dirty = true;
             partitions_table.insert(dev.clone(), dir.path());
             last_connected_devices.insert(dev);
         } else {
@@ -193,8 +195,6 @@ pub async fn start_usb_service() -> Result<()> {
                 continue;
             },
         };
-
-        let mut dirty = false;
 
         for added in found_dev.difference(&last_connected_devices) {
             info!("Added device: {:?}", added);
@@ -251,8 +251,10 @@ pub async fn start_usb_service() -> Result<()> {
             if let Some(fs) = UsbFilesystem::get_filesystem() {
                 let mut write_guard = fs.write().await;
                 write_guard.reinit(root_dir);
-                write_guard.set_available(partitions_table.len() > 0);
+                write_guard.set_available(!partitions_table.is_empty());
             }
+
+            dirty = false;
         }
 
         last_connected_devices = found_dev;

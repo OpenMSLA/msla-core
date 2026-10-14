@@ -171,7 +171,7 @@ impl GCodeParser {
 
         let mut message_parts = vec![first];
         if first.starts_with("\"") {
-            while let Some(part) = iter.next() {
+            for part in iter {
                 message_parts.push(part);
                 if part.ends_with("\"") {
                     break;

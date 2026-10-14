@@ -153,13 +153,22 @@ fn handle_command(
         // List dir
         70 => {
             let entry_id = packet.read_u16().ok_or(anyhow!("can't parse"))?;
-            let _page = packet.read_u16().ok_or(anyhow!("can't parse"))?;
-            let _take = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+            let page = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+            let take = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+
+            let mut p = UARTPacket::new_empty(packet.packet_id + 1);
 
             let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(list_dir(entry_id))?;
+            match rt.block_on(list_dir(entry_id, page, take)) {
+                Ok(l) => p.extend(l),
+                Err(e) => {
+                    error!("Error during usb listing: {e}");
+                    p.write_u8(0); // Entries len
+                    p.write_u8(0); // Total len
+                },
+            }
 
-            None
+            Some(p)
         },
 
         _ => None,
