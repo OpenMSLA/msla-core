@@ -165,4 +165,9 @@ impl UARTPacket {
         self.write_u16(str.len() as u16);
         self.payload.extend(str.bytes());
     }
+
+    /// Extends packet from other's packet data
+    pub fn extend(&mut self, rh: Self) {
+        self.payload.extend(rh.payload);
+    }
 }

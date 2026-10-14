@@ -5,4 +5,3 @@ pub mod model_parser;
 pub mod peripheral;
 pub mod printer_manager;
 pub mod rest;
-pub mod usb;

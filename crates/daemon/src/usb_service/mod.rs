@@ -1,13 +1,17 @@
 use anyhow::Result;
-use msla_core::{config, types::usb::UsbState};
+use msla_core::config;
 use regex::Regex;
 use std::{
     collections::{HashMap, HashSet},
     path::PathBuf,
     time::Duration,
 };
-use tokio::{fs, process::Command, sync::watch::Sender, time::sleep};
+use tokio::{fs, process::Command, time::sleep};
 use tracing::{error, info, warn};
+
+use crate::usb_service::fs_service::UsbFilesystem;
+
+pub mod fs_service;
 
 /// Gets all device list, matching provided regex
 async fn get_device_list(path: &PathBuf, re: &Regex) -> Result<HashSet<PathBuf>> {
@@ -144,7 +148,7 @@ async fn unmount_device(path: &PathBuf) {
 }
 
 /// Starts usb mounter service loop
-pub async fn start_usb_service(sender: Sender<UsbState>) -> Result<()> {
+pub async fn start_usb_service() -> Result<()> {
     let config = config::get_config().await;
     let re = Regex::new(&config.usb_controller.usb_path_regex)?;
 
@@ -156,6 +160,9 @@ pub async fn start_usb_service(sender: Sender<UsbState>) -> Result<()> {
 
     // Detected devices at last check
     let mut last_connected_devices: HashSet<PathBuf> = HashSet::new();
+
+    // Init usb fs with default path
+    UsbFilesystem::init(config.usb_controller.mount_point.clone())?;
 
     let mut already_mounted = fs::read_dir(&config.usb_controller.mount_point).await?;
     while let Some(dir) = already_mounted.next_entry().await? {
@@ -187,6 +194,8 @@ pub async fn start_usb_service(sender: Sender<UsbState>) -> Result<()> {
             },
         };
 
+        let mut dirty = false;
+
         for added in found_dev.difference(&last_connected_devices) {
             info!("Added device: {:?}", added);
 
@@ -206,6 +215,7 @@ pub async fn start_usb_service(sender: Sender<UsbState>) -> Result<()> {
                     );
 
                     partitions_table.insert(added.to_path_buf(), free_mount_folder);
+                    dirty = true;
                 },
                 Err(e) => {
                     error!("Cannot mount device {:?}: {e}", added)
@@ -220,23 +230,30 @@ pub async fn start_usb_service(sender: Sender<UsbState>) -> Result<()> {
                 Some(path) => {
                     unmount_device(path).await;
                     partitions_table.remove(removed);
+                    dirty = true;
                 },
                 None => warn!("Device {:?} not mounted", removed),
             }
         }
 
-        let devices_len = found_dev.len();
-        let root_dir = if devices_len == 1 {
-            found_dev
-                .iter()
-                .next()
-                .and_then(|x| partitions_table.get(x).cloned())
-                .unwrap_or_else(|| config.usb_controller.mount_point.clone())
-        } else {
-            config.usb_controller.mount_point.clone()
-        };
+        if dirty {
+            let devices_len = found_dev.len();
+            let root_dir = if devices_len == 1 {
+                found_dev
+                    .iter()
+                    .next()
+                    .and_then(|x| partitions_table.get(x).cloned())
+                    .unwrap_or_else(|| config.usb_controller.mount_point.clone())
+            } else {
+                config.usb_controller.mount_point.clone()
+            };
 
-        let _ = sender.send(UsbState { root_dir });
+            if let Some(fs) = UsbFilesystem::get_filesystem() {
+                let mut write_guard = fs.write().await;
+                write_guard.reinit(root_dir);
+                write_guard.set_available(partitions_table.len() > 0);
+            }
+        }
 
         last_connected_devices = found_dev;
         sleep(scan_duration).await;

@@ -10,6 +10,7 @@ use crate::{
     control_display::{
         general_status::build_general_status_response,
         preview_loader::get_preview_bytes,
+        usb::list_dir,
     },
     peripheral::PeripheralController,
     uart::{Uart, packet::UARTPacket},
@@ -17,6 +18,7 @@ use crate::{
 
 mod general_status;
 mod preview_loader;
+mod usb;
 
 /// Create display thread
 pub fn spawn_control_display_thread(
@@ -145,6 +147,18 @@ fn handle_command(
             if !state.borrow().is_busy() {
                 let _ = sender.blocking_send(PrinterCommand::Home);
             }
+            None
+        },
+
+        // List dir
+        70 => {
+            let entry_id = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+            let _page = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+            let _take = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+
+            let rt = tokio::runtime::Runtime::new()?;
+            rt.block_on(list_dir(entry_id))?;
+
             None
         },
 
