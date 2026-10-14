@@ -163,8 +163,8 @@ fn handle_command(
                 Ok(l) => p.extend(l),
                 Err(e) => {
                     error!("Error during usb listing: {e}");
-                    p.write_u8(0); // Entries len
-                    p.write_u8(0); // Total len
+                    p.write_u16(0); // Entries len
+                    p.write_u16(0); // Total len
                 },
             }
 
