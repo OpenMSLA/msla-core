@@ -1,6 +1,7 @@
-use std::thread;
+use std::{net::IpAddr, thread};
 
 use anyhow::{Result, anyhow};
+use local_ip_address::local_ip;
 use msla_core::types::printer_manager::{PrinterCommand, PrinterState};
 use tokio::sync::{mpsc::Sender, watch::Receiver};
 use tracing::error;
@@ -81,6 +82,32 @@ fn handle_command(
             let mut p = UARTPacket::new_empty(packet.packet_id + 1);
 
             p.write_string(env!("CARGO_PKG_VERSION").to_owned());
+            Some(p)
+        },
+
+        // Machine network status
+        16 => {
+            let mut p = UARTPacket::new_empty(packet.packet_id + 1);
+
+            // Current local ip
+            //      1 byte       4 bytes (octets) (u32) in le
+            // <ip-availability> <ipv4>
+            match local_ip() {
+                Ok(ip) => match ip {
+                    IpAddr::V4(ip) => {
+                        p.write_u8(1);
+                        p.write_u32(u32::from_le_bytes(ip.octets()));
+                    },
+                    // IDK why method that returns "local IPv4 address"
+                    // returns IpAddr instead of Ipv4Addr
+                    IpAddr::V6(_) => p.write_u8(0),
+                },
+                Err(e) => {
+                    p.write_u8(0);
+                    error!("Cannot get local ip: {e}")
+                },
+            }
+
             Some(p)
         },
 
