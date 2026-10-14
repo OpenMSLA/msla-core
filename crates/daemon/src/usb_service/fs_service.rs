@@ -94,7 +94,8 @@ impl UsbFilesystem {
         let mut hash_map: HashMap<u16, Arc<FileEntry>> = HashMap::new();
         let mut reader = fs::read_dir(&traversing_dir.path).await?;
         while let Some(entry) = reader.next_entry().await? {
-            if let Some(e_i) = self.inverted_file_index.get(&entry.path())
+            let path = entry.path();
+            if let Some(e_i) = self.inverted_file_index.get(&path)
                 && let Some(e) = self.file_index.get(e_i)
             {
                 // Entry already traversed
@@ -105,31 +106,33 @@ impl UsbFilesystem {
             let file_name = entry.file_name();
             let file_type = entry.file_type().await?;
 
-            if !SUPPORTED_FILE_EXTENSIONS
-                .iter()
-                .any(|ext| file_name.to_string_lossy().ends_with(ext))
-                && file_type.is_file()
+            if file_type.is_file()
+                && !path.extension().is_some_and(|ext| {
+                    SUPPORTED_FILE_EXTENSIONS.contains(&ext.to_string_lossy().as_ref())
+                })
             {
                 continue;
             }
 
             let t = if file_type.is_dir() {
                 FileEntryType::Dir
-            } else {
+            } else if file_type.is_file() {
                 FileEntryType::File
+            } else {
+                continue;
             };
 
-            let arc = Arc::new(FileEntry::new(
-                file_name.to_string_lossy(),
-                entry.path(),
-                self._inc,
-                traverse_id,
-                t,
-            ));
+            let arc = Arc::new(FileEntry {
+                file_name: file_name.to_string_lossy().to_string(),
+                path: path.clone(),
+                id: self._inc,
+                parent_id: traverse_id,
+                file_type: t,
+            });
 
             hash_map.insert(self._inc, arc.clone());
             self.file_index.insert(self._inc, arc);
-            self.inverted_file_index.insert(entry.path(), self._inc);
+            self.inverted_file_index.insert(path, self._inc);
 
             self._inc += 1;
         }

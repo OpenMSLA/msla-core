@@ -29,7 +29,6 @@ pub async fn list_dir(id: u16, page: u16, take: u16) -> Result<UARTPacket> {
 
     for key in items {
         let el = list_dir.get(key).unwrap();
-        println!("{:?}", el);
 
         packet.write_u16(el.id); // Entry id
         packet.write_u16(el.parent_id); // Parent id
