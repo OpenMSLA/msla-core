@@ -1,16 +1,18 @@
 use crate::{uart::packet::UARTPacket, usb_service::fs_service::UsbFilesystem};
 use anyhow::{Result, anyhow};
-use tracing::info;
+use tracing::{debug, info};
 
 /// Returns a requested dir list
 pub async fn list_dir(id: u16, page: u16, take: u16) -> Result<UARTPacket> {
+    debug!("Requested fs with id {id}, page {page}");
+
     let fs = UsbFilesystem::get_filesystem().ok_or(anyhow!("FS not available"))?;
 
     if !fs.read().await.available {
         anyhow::bail!("Fs not available");
     }
 
-    let list_dir = fs.write().await.traverse_dir(id).await?;
+    let (parent_id, list_dir) = fs.write().await.traverse_dir(id).await?;
 
     let mut keys: Vec<_> = list_dir.keys().collect();
     keys.sort();
@@ -25,16 +27,12 @@ pub async fn list_dir(id: u16, page: u16, take: u16) -> Result<UARTPacket> {
     };
 
     let mut packet = UARTPacket::new_empty(0);
+    packet.write_u16(parent_id);
     packet.write_u16(items.len() as u16);
 
-    for key in items {
-        let el = list_dir.get(key).unwrap();
-
-        packet.write_u16(el.id); // Entry id
-        packet.write_u16(el.parent_id); // Parent id
-        packet.write_u8(el.file_type.clone() as u8); // File type
-        packet.write_string(el.file_name.clone()); // File name
-    }
+    items
+        .iter()
+        .for_each(|k| list_dir.get(k).unwrap().serialize_to(&mut packet));
 
     packet.write_u16(keys.len() as u16); // Total entries
 

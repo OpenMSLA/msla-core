@@ -8,6 +8,8 @@ use std::{
 use tokio::{fs, sync::RwLock};
 use tracing::info;
 
+use crate::uart::packet::UARTPacket;
+
 type FSType = OnceLock<Arc<RwLock<UsbFilesystem>>>;
 static USB_FILESYSTEM: FSType = OnceLock::new();
 
@@ -86,11 +88,15 @@ impl UsbFilesystem {
     }
 
     /// Traverses dir by provided id
-    pub async fn traverse_dir(&mut self, traverse_id: u16) -> Result<HashMap<u16, Arc<FileEntry>>> {
+    pub async fn traverse_dir(
+        &mut self,
+        traverse_id: u16,
+    ) -> Result<(u16, HashMap<u16, Arc<FileEntry>>)> {
         let Some(traversing_dir) = self.file_index.get(&traverse_id) else {
             anyhow::bail!("Invalid directory id: index not found");
         };
 
+        let parent_id = traversing_dir.parent_id;
         let mut hash_map: HashMap<u16, Arc<FileEntry>> = HashMap::new();
         let mut reader = fs::read_dir(&traversing_dir.path).await?;
         while let Some(entry) = reader.next_entry().await? {
@@ -137,7 +143,7 @@ impl UsbFilesystem {
             self._inc += 1;
         }
 
-        Ok(hash_map)
+        Ok((parent_id, hash_map))
     }
 }
 
@@ -157,5 +163,12 @@ impl FileEntry {
             path,
             file_type: t,
         }
+    }
+
+    /// Serialize entry to a uart packet
+    pub fn serialize_to(&self, packet: &mut UARTPacket) {
+        packet.write_u16(self.id); // Entry id
+        packet.write_u8(self.file_type.clone() as u8); // File type
+        packet.write_string(self.file_name.clone()); // File name
     }
 }
