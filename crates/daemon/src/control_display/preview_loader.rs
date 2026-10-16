@@ -1,12 +1,10 @@
 use anyhow::{Result, anyhow};
 use image::{DynamicImage, GenericImageView, Rgb, RgbImage, imageops::FilterType};
-use msla_core::types::printer_manager::PrinterState;
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
     path::PathBuf,
     sync::{Arc, LazyLock, Mutex},
 };
-use tokio::sync::watch::Receiver;
 use tracing::error;
 
 #[derive(Default)]
@@ -25,21 +23,7 @@ fn calc_path_hash(pb: &PathBuf) -> u64 {
     s.finish()
 }
 
-pub fn get_preview_bytes(
-    state: Receiver<PrinterState>,
-    side: u16,
-    count: u16,
-    offset: u16,
-) -> Result<Vec<u8>> {
-    let path = match state.borrow().clone() {
-        PrinterState::Printing(st) | PrinterState::Paused(st) => st
-            .model
-            .model_preview
-            .clone()
-            .ok_or_else(|| anyhow!("Preview not available"))?,
-        _ => anyhow::bail!("Wrong printer state"),
-    };
-
+pub fn get_preview_bytes(path: PathBuf, side: u16, count: u16, offset: u16) -> Result<Vec<u8>> {
     let mut li = {
         match LOADED_PREVIEW.try_lock() {
             Ok(m) => m.clone(),

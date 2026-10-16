@@ -1,14 +1,30 @@
 use msla_core::types::printer_manager::PrinterState;
-use tokio::sync::watch::Receiver;
+use tokio::{runtime::Runtime, sync::watch::Receiver};
 
-use crate::uart::packet::UARTPacket;
+use crate::{uart::packet::UARTPacket, usb_service::fs_service::UsbFilesystem};
 
 pub fn build_general_status_response(
+    tokio_rt: &Runtime,
     packet: UARTPacket,
     state: Receiver<PrinterState>,
 ) -> UARTPacket {
     let mut p = UARTPacket::new_empty(packet.packet_id + 1);
     let st = state.borrow().clone();
+
+    let fs = tokio_rt.block_on(async {
+        let Some(fs) = UsbFilesystem::get_filesystem() else {
+            return false;
+        };
+
+        fs.read().await.available
+    });
+
+    // Flags array
+    let flags: u8 = fs as u8; // Usb availability
+    // flags |= (true as u8) << 1;
+
+    // Flags
+    p.write_u8(flags);
 
     match &st {
         PrinterState::Idle => p.write_u8(0),
