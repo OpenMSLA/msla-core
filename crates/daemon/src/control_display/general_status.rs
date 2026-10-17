@@ -1,7 +1,13 @@
+use anyhow::{Result, anyhow};
+
 use msla_core::types::printer_manager::PrinterState;
 use tokio::{runtime::Runtime, sync::watch::Receiver};
 
-use crate::{uart::packet::UARTPacket, usb_service::fs_service::UsbFilesystem};
+use crate::{
+    control_display::usb::load_fs_model,
+    uart::packet::UARTPacket,
+    usb_service::fs_service::UsbFilesystem,
+};
 
 pub fn build_general_status_response(
     tokio_rt: &Runtime,
@@ -84,4 +90,41 @@ pub fn build_general_status_response(
     };
 
     p
+}
+
+/// Build model info packet
+pub async fn build_model_info(model_id: u16) -> Result<UARTPacket> {
+    let mut p = UARTPacket::new_empty(0);
+    let model = load_fs_model(model_id).await?;
+
+    let file_size = {
+        let fs = UsbFilesystem::get_filesystem().ok_or(anyhow!("FS not available"))?;
+        fs.read()
+            .await
+            .file_index
+            .get(&model_id)
+            .ok_or(anyhow!("Cannot load model: File not found"))
+            .map(|e| e.file_size)
+    }?;
+
+    // total layers
+    p.write_u16(model.model_meta.total_layer_count as u16);
+
+    // full estimated printing time
+    p.write_u32(model.model_meta.estimated_printing_time as u32);
+
+    // Layer height
+    p.write_f32(model.model_meta.layer_height.unwrap_or_default() as f32);
+
+    // File size in bytes
+    p.write_u32(file_size);
+
+    if let Some(ref name) = model.model_meta.file_name {
+        p.write_u8(1);
+        p.write_string(name.to_string());
+    } else {
+        p.write_u8(0); // No name
+    }
+
+    Ok(p)
 }

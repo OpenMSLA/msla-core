@@ -11,7 +11,7 @@ use tracing::error;
 
 use crate::{
     control_display::{
-        general_status::build_general_status_response,
+        general_status::{build_general_status_response, build_model_info},
         preview_loader::get_preview_bytes,
         usb::{list_dir, load_fs_model},
     },
@@ -134,6 +134,7 @@ fn handle_command(
             match get_preview_bytes(path, side, count, offset) {
                 Ok(result) => {
                     p.write_u8(0); // SUCCESS
+                    p.write_u16(offset / 2);
                     p.write_u16(result.len() as u16);
                     p.payload.extend(result);
                 },
@@ -181,6 +182,29 @@ fn handle_command(
             Some(p)
         },
 
+        // Model info
+        72 => {
+            let mut p = UARTPacket::new_empty(packet.packet_id + 1);
+            let file_id = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+
+            match tokio_rt.block_on(build_model_info(file_id)) {
+                Ok(data) => {
+                    p.write_u8(0); // Success
+                    p.extend(data);
+                },
+                Err(e) => {
+                    p.write_u8(1); // Error
+
+                    let e_str = e.to_string();
+                    error!("Cannot get model info print: {}", e_str);
+                    p.write_string(e_str);
+                },
+            }
+
+            Some(p)
+        },
+
+        // Model file preview
         74 => {
             let file_id = packet.read_u16().ok_or(anyhow!("can't parse"))?;
             let side = packet.read_u16().ok_or(anyhow!("can't parse"))?;
@@ -194,6 +218,7 @@ fn handle_command(
                     match get_preview_bytes(model.model_preview.clone(), side, count, offset) {
                         Ok(result) => {
                             p.write_u8(0); // SUCCESS
+                            p.write_u16(offset / 2);
                             p.write_u16(result.len() as u16);
                             p.payload.extend(result);
                         },
@@ -208,6 +233,39 @@ fn handle_command(
                     error!("Model load error: {e}");
 
                     p.write_u8(1); // ERROR
+                },
+            }
+
+            Some(p)
+        },
+
+        // Start usb print
+        76 => {
+            let mut p = UARTPacket::new_empty(packet.packet_id + 1);
+
+            if state.borrow().is_busy() {
+                p.write_u8(1);
+                p.write_string("Cannot start print: Printer is busy".to_string());
+                return Ok(Some(p));
+            }
+
+            let mut f = async || -> Result<()> {
+                let file_id = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+                let model = load_fs_model(file_id).await?;
+
+                sender.send(PrinterCommand::StartPrint(model)).await?;
+
+                Ok(())
+            };
+
+            match tokio_rt.block_on(f()) {
+                Ok(_) => p.write_u8(0), // Success
+                Err(e) => {
+                    p.write_u8(1); // Error
+
+                    let e_str = e.to_string();
+                    error!("Cannot start print: {}", e_str);
+                    p.write_string(e_str);
                 },
             }
 

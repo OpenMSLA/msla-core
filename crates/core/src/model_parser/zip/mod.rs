@@ -9,7 +9,7 @@ use crate::{model_parser::zip::gcode::GCodeParser, types::model::Model};
 
 /// Load zip model from file
 pub async fn load_zip_model(zip_path: impl AsRef<std::path::Path>) -> Result<Arc<Model>> {
-    let temp_dir = open_zip_temp(zip_path)?;
+    let temp_dir = open_zip_temp(&zip_path)?;
 
     let gcode_file = temp_dir.path().join("run.gcode");
     let gcode = fs::read_to_string(gcode_file)
@@ -22,6 +22,11 @@ pub async fn load_zip_model(zip_path: impl AsRef<std::path::Path>) -> Result<Arc
     let preview_path = temp_dir.path().join("preview.png");
     let p = Path::new(&preview_path);
     let preview = if p.exists() { Some(p) } else { None };
+
+    let path: &Path = zip_path.as_ref();
+    gparser.meta.file_name = path
+        .file_name()
+        .and_then(|n| Some(n.to_string_lossy().to_string()));
 
     Ok(Arc::new(Model::new(
         gparser.ir,
