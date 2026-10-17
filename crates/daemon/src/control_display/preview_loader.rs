@@ -23,7 +23,13 @@ fn calc_path_hash(pb: &PathBuf) -> u64 {
     s.finish()
 }
 
-pub fn get_preview_bytes(path: PathBuf, side: u16, count: u16, offset: u16) -> Result<Vec<u8>> {
+pub fn get_preview_bytes(
+    path: Option<PathBuf>,
+    side: u16,
+    count: u16,
+    offset: u16,
+) -> Result<Vec<u8>> {
+    let path = path.ok_or(anyhow!("Preview not available"))?;
     let mut li = {
         match LOADED_PREVIEW.try_lock() {
             Ok(m) => m.clone(),

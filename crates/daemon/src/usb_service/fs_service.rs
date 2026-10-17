@@ -1,7 +1,7 @@
 use anyhow::Result;
 use msla_core::SUPPORTED_FILE_EXTENSIONS;
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     path::PathBuf,
     sync::{Arc, OnceLock},
 };
@@ -16,8 +16,7 @@ static USB_FILESYSTEM: FSType = OnceLock::new();
 #[derive(Debug)]
 pub struct UsbFilesystem {
     pub available: bool,
-    pub file_index: HashMap<u16, Arc<FileEntry>>,
-    pub inverted_file_index: HashMap<PathBuf, u16>,
+    pub file_index: HashMap<u16, FileEntry>,
 
     pub _inc: u16,
 }
@@ -34,27 +33,25 @@ pub struct FileEntry {
     pub id: u16,
     pub parent_id: u16,
     pub path: PathBuf,
+    pub file_size: u32,
 
     pub file_name: String,
-
     pub file_type: FileEntryType,
+
+    pub children: Option<HashSet<u16>>,
 }
 
 impl UsbFilesystem {
     /// Creates new filesystem with provided path and inits store
     pub fn init(root: PathBuf) -> Result<()> {
         let mut hm = HashMap::new();
-        hm.insert(
-            0,
-            Arc::new(FileEntry::new("/", root, 0, 0, FileEntryType::Dir)),
-        );
+        hm.insert(0, FileEntry::new_root(root));
 
         USB_FILESYSTEM
             .set(Arc::new(RwLock::new(Self {
                 file_index: hm,
-                available: true,
+                available: false,
                 _inc: 1,
-                inverted_file_index: HashMap::new(),
             })))
             .map_err(|_| anyhow::anyhow!("USB filesystem is already initialized"))?;
 
@@ -71,13 +68,7 @@ impl UsbFilesystem {
         info!("Reinit usb fs to {:?}", root);
 
         self.file_index.clear();
-        self.file_index.insert(
-            0,
-            Arc::new(FileEntry::new("/", root.clone(), 0, 0, FileEntryType::Dir)),
-        );
-
-        self.inverted_file_index.clear();
-        self.inverted_file_index.insert(root, 0);
+        self.file_index.insert(0, FileEntry::new_root(root.clone()));
 
         self._inc = 1;
     }
@@ -88,27 +79,24 @@ impl UsbFilesystem {
     }
 
     /// Traverses dir by provided id
-    pub async fn traverse_dir(
-        &mut self,
-        traverse_id: u16,
-    ) -> Result<(u16, HashMap<u16, Arc<FileEntry>>)> {
-        let Some(traversing_dir) = self.file_index.get(&traverse_id) else {
-            anyhow::bail!("Invalid directory id: index not found");
+    pub async fn dir_contents(&mut self, dir_id: u16) -> Result<(u16, HashSet<u16>)> {
+        let Some(dir) = self.file_index.get(&dir_id) else {
+            anyhow::bail!("Invalid directory id: index not found: {dir_id}");
         };
 
-        let parent_id = traversing_dir.parent_id;
-        let mut hash_map: HashMap<u16, Arc<FileEntry>> = HashMap::new();
-        let mut reader = fs::read_dir(&traversing_dir.path).await?;
+        if matches!(dir.file_type, FileEntryType::File) {
+            anyhow::bail!("Not a dir");
+        }
+
+        if let Some(ref children) = dir.children {
+            return Ok((dir.parent_id, children.clone()));
+        }
+
+        let parent = dir.parent_id;
+        let mut children: HashSet<u16> = HashSet::new();
+        let mut reader = fs::read_dir(&dir.path).await?;
         while let Some(entry) = reader.next_entry().await? {
             let path = entry.path();
-            if let Some(e_i) = self.inverted_file_index.get(&path)
-                && let Some(e) = self.file_index.get(e_i)
-            {
-                // Entry already traversed
-                hash_map.insert(*e_i, e.clone());
-                continue;
-            }
-
             let file_name = entry.file_name();
             let file_type = entry.file_type().await?;
 
@@ -128,40 +116,42 @@ impl UsbFilesystem {
                 continue;
             };
 
-            let arc = Arc::new(FileEntry {
+            let entry = FileEntry {
                 file_name: file_name.to_string_lossy().to_string(),
                 path: path.clone(),
                 id: self._inc,
-                parent_id: traverse_id,
+                parent_id: dir_id,
                 file_type: t,
-            });
+                file_size: entry.metadata().await?.len() as u32,
 
-            hash_map.insert(self._inc, arc.clone());
-            self.file_index.insert(self._inc, arc);
-            self.inverted_file_index.insert(path, self._inc);
+                children: None,
+            };
+
+            children.insert(self._inc);
+            self.file_index.insert(self._inc, entry);
 
             self._inc += 1;
         }
 
-        Ok((parent_id, hash_map))
+        if let Some(d) = self.file_index.get_mut(&dir_id) {
+            d.children = Some(children.clone());
+        }
+
+        Ok((parent, children))
     }
 }
 
 impl FileEntry {
-    /// Creates new file entry
-    pub fn new(
-        name: impl Into<String>,
-        path: PathBuf,
-        id: u16,
-        parent_id: u16,
-        t: FileEntryType,
-    ) -> Self {
+    /// Creates new root entry
+    pub fn new_root(path: PathBuf) -> Self {
         Self {
-            file_name: name.into(),
-            id,
-            parent_id,
+            file_name: "/".to_string(),
+            id: 0,
+            parent_id: 0,
             path,
-            file_type: t,
+            file_type: FileEntryType::Dir,
+            file_size: 0,
+            children: None,
         }
     }
 
@@ -169,6 +159,7 @@ impl FileEntry {
     pub fn serialize_to(&self, packet: &mut UARTPacket) {
         packet.write_u16(self.id); // Entry id
         packet.write_u8(self.file_type.clone() as u8); // File type
+        packet.write_u32(self.file_size); // File size
         packet.write_string(self.file_name.clone()); // File name
     }
 }

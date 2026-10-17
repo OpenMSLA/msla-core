@@ -13,7 +13,7 @@ use crate::{
     control_display::{
         general_status::build_general_status_response,
         preview_loader::get_preview_bytes,
-        usb::list_dir,
+        usb::{list_dir, load_fs_model},
     },
     peripheral::PeripheralController,
     uart::{Uart, packet::UARTPacket},
@@ -123,11 +123,9 @@ fn handle_command(
             let offset = packet.read_u16().ok_or(anyhow!("can't parse"))?;
 
             let path = match state.borrow().clone() {
-                PrinterState::Printing(st) | PrinterState::Paused(st) => st
-                    .model
-                    .model_preview
-                    .clone()
-                    .ok_or_else(|| anyhow!("Preview not available"))?,
+                PrinterState::Printing(st) | PrinterState::Paused(st) => {
+                    st.model.model_preview.clone()
+                },
                 _ => anyhow::bail!("Wrong printer state"),
             };
 
@@ -177,6 +175,39 @@ fn handle_command(
                     error!("Error during usb listing: {e}");
                     p.write_u16(0); // Entries len
                     p.write_u16(0); // Total len
+                },
+            }
+
+            Some(p)
+        },
+
+        74 => {
+            let file_id = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+            let side = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+            let count = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+            let offset = packet.read_u16().ok_or(anyhow!("can't parse"))?;
+
+            let mut p = UARTPacket::new_empty(packet.packet_id + 1);
+
+            match tokio_rt.block_on(load_fs_model(file_id)) {
+                Ok(model) => {
+                    match get_preview_bytes(model.model_preview.clone(), side, count, offset) {
+                        Ok(result) => {
+                            p.write_u8(0); // SUCCESS
+                            p.write_u16(result.len() as u16);
+                            p.payload.extend(result);
+                        },
+                        Err(e) => {
+                            error!("Preview load error: {e}");
+
+                            p.write_u8(1); // ERROR
+                        },
+                    }
+                },
+                Err(e) => {
+                    error!("Model load error: {e}");
+
+                    p.write_u8(1); // ERROR
                 },
             }
 
