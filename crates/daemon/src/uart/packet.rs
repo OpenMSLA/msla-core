@@ -59,6 +59,25 @@ impl UARTPacket {
             return Err(anyhow!("Can't parse packet: Payload is too short"));
         }
 
+        let packet_end = SYNC_LEN
+            .checked_add(2)
+            .and_then(|offset| offset.checked_add(payload_len))
+            .ok_or(anyhow!("Packet length overflow"))?;
+        let received_crc = *data
+            .get(packet_end)
+            .ok_or(anyhow!("Cannot extract packet CRC"))?;
+
+        let expected_crc = crc8(
+            data.get(SYNC_LEN + 2..packet_end)
+                .ok_or(anyhow!("Not enough data for packet payload"))?,
+        );
+
+        if received_crc != expected_crc {
+            return Err(anyhow!(
+                "Invalid packet CRC: expected 0x{expected_crc:02X}, got 0x{received_crc:02X}"
+            ));
+        }
+
         let cmd = data
             .get(SYNC_LEN + 2)
             .ok_or(anyhow!("Cannot extract cmd bytes from packet"))?;
@@ -169,5 +188,32 @@ impl UARTPacket {
     /// Extends packet from other's packet data
     pub fn extend(&mut self, rh: Self) {
         self.payload.extend(rh.payload);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::UARTPacket;
+
+    #[test]
+    fn parse_accepts_packet_with_valid_crc() {
+        let packet = UARTPacket::new(0x2A, &[1, 2, 3]);
+
+        let parsed = UARTPacket::parse(packet.send()).expect("valid packet must parse");
+
+        assert_eq!(parsed.packet_id, 0x2A);
+        assert_eq!(parsed.payload, vec![1, 2, 3]);
+    }
+
+    #[test]
+    fn parse_rejects_packet_with_invalid_crc() {
+        let packet = UARTPacket::new(0x2A, &[1, 2, 3]);
+        let mut encoded = packet.send();
+        let crc_index = encoded.len() - 1;
+        encoded[crc_index] ^= 0x01;
+
+        let error = UARTPacket::parse(encoded).expect_err("corrupted packet must be rejected");
+
+        assert!(error.to_string().contains("Invalid packet CRC"));
     }
 }

@@ -131,7 +131,11 @@ async fn unmount_device(path: &PathBuf) {
     let res = Command::new("umount").arg(path).output().await;
     match res {
         Ok(o) => {
-            if !o.status.success() {
+            if o.status.success() {
+                if let Err(e) = fs::remove_dir_all(path).await {
+                    error!("Could not delete old mount dir: {e}")
+                }
+            } else {
                 error!(
                     "Could not unmount device: {}",
                     String::from_utf8_lossy(&o.stderr)
@@ -139,11 +143,6 @@ async fn unmount_device(path: &PathBuf) {
             }
         },
         Err(e) => error!("Error calling umount: {e}"),
-    }
-
-    // removes old dir
-    if let Err(e) = fs::remove_dir_all(path).await {
-        error!("Could not delete old mount dir: {e}")
     }
 }
 
