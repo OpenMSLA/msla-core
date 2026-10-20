@@ -1167,6 +1167,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "deunicode"
+version = "1.6.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "abd57806937c9cc163efc8ea3910e00a62e2aeb0b8119f1793a978088f8f6b04"
+
+[[package]]
 name = "dialoguer"
 version = "0.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2388,6 +2394,7 @@ dependencies = [
  "actix-multipart",
  "actix-web",
  "anyhow",
+ "deunicode",
  "futures-util",
  "image",
  "local-ip-address",

@@ -6,21 +6,22 @@ authors.workspace = true
 repository.workspace = true
 
 [dependencies]
-msla-core ={ path = "../core"}
-anyhow = {workspace = true}
-serialport = {workspace = true}
-tokio = {workspace = true}
+msla-core = { path = "../core" }
+anyhow = { workspace = true }
+serialport = { workspace = true }
+tokio = { workspace = true }
 image = "0.25.10"
 memmap2 = "0.9"
-tempfile = {workspace = true}
-serde = {workspace = true}
-tracing = {workspace = true}
-tracing-subscriber =  {workspace = true}
+tempfile = { workspace = true }
+serde = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
 actix-web = "4.15.0"
-serde_json = {workspace = true}
+serde_json = { workspace = true }
 actix-files = "0.6"
 actix-multipart = "0.8.1"
 futures-util = "0.3"
 validator = { version = "0.19", features = ["derive"] }
 regex = "1.13.1"
 local-ip-address = "0.6.13"
+deunicode = "1.6.2"

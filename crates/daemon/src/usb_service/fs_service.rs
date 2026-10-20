@@ -13,12 +13,11 @@ use crate::uart::packet::UARTPacket;
 type FSType = OnceLock<Arc<RwLock<UsbFilesystem>>>;
 static USB_FILESYSTEM: FSType = OnceLock::new();
 
-#[derive(Debug)]
 pub struct UsbFilesystem {
     pub available: bool,
     pub file_index: HashMap<u16, FileEntry>,
 
-    pub _inc: u16,
+    _inc: u16,
 }
 
 #[derive(Default, Debug, Clone)]
@@ -160,6 +159,6 @@ impl FileEntry {
         packet.write_u16(self.id); // Entry id
         packet.write_u8(self.file_type.clone() as u8); // File type
         packet.write_u32(self.file_size); // File size
-        packet.write_string(self.file_name.clone()); // File name
+        packet.write_string(deunicode::deunicode(&self.file_name)); // File name
     }
 }

@@ -121,7 +121,7 @@ pub async fn build_model_info(model_id: u16) -> Result<UARTPacket> {
 
     if let Some(ref name) = model.model_meta.file_name {
         p.write_u8(1);
-        p.write_string(name.to_string());
+        p.write_string(deunicode::deunicode(name));
     } else {
         p.write_u8(0); // No name
     }
