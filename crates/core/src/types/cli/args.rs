@@ -57,8 +57,11 @@ pub struct MoveTo {
 
 #[derive(Parser, Debug)]
 pub struct ModelInfoArgs {
-    #[arg(long, help = "Zip model extension"/*, conflicts_with = "other_ext"*/)]
+     #[arg(long, help = "Zip model extension", conflicts_with_all = ["photon"])]
     pub zip: bool,
+
+    #[arg(long, help = "Photon model extension", conflicts_with_all = ["zip"])]
+    pub photon: bool,
 
     #[arg(long, help = "Path to the model")]
     pub path: String,
