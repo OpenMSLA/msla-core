@@ -1,5 +1,5 @@
 use crate::{
-    api::{ApiService, FileExt, PlacingType},
+    api::{ApiService, PlacingType},
     context::{add_to_context, remove_from_context},
     model_info::print_model_info,
     printer_selector::run_selector,
@@ -140,22 +140,13 @@ async fn execute(args: &Args) -> Result<()> {
 
             match command {
                 Command::Start(start_args) => {
-                    let ext = if start_args.zip {
-                        FileExt::Zip
-                    } else if start_args.photon {
-                        FileExt::Photon
-                    } else {
-                        error!("Please, specify the file type: --zip or others");
-                        return Ok(());
-                    };
-
                     if let Some(local) = &start_args.local {
                         api_client
-                            .start_print(PlacingType::Local, ext, PathBuf::from(local))
+                            .start_print(PlacingType::Local, PathBuf::from(local))
                             .await?;
                     } else if let Some(remote) = &start_args.remote {
                         api_client
-                            .start_print(PlacingType::Remote, ext, PathBuf::from(remote))
+                            .start_print(PlacingType::Remote, PathBuf::from(remote))
                             .await?;
                     } else {
                         error!("Please, specify the file path: --local <path> or --remote <path>")

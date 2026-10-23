@@ -2,10 +2,7 @@ use std::sync::{Arc, OnceLock};
 
 use crate::{uart::packet::UARTPacket, usb_service::fs_service::UsbFilesystem};
 use anyhow::{Result, anyhow};
-use msla_core::{
-    model_parser::{photon::load_photon_model, zip::load_zip_model},
-    types::model::Model,
-};
+use msla_core::{model_parser::load_model, types::model::Model};
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
@@ -81,11 +78,7 @@ pub async fn load_fs_model(file_id: u16) -> Result<Arc<Model>> {
         .path
         .clone();
 
-    let model = match model_file.extension().and_then(|ext| ext.to_str()) {
-        Some("zip") => load_zip_model(model_file).await?,
-        Some("photon") => load_photon_model(model_file).await?,
-        _ => anyhow::bail!("Invalid file ext"),
-    };
+    let model = load_model(model_file).await?;
 
     // Save loaded model into cache
     *CACHED_MODEL.get().unwrap().write().await = Some((file_id, model.clone()));

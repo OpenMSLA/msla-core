@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
 use actix_web::{HttpResponse, Responder, post, web};
 use msla_core::{
-    model_parser::{photon::load_photon_model, zip::load_zip_model},
+    model_parser::load_model_with_ext,
     types::{printer_manager::PrinterCommand, rest::RESTPrinterState},
 };
 use serde::Deserialize;
@@ -29,9 +29,9 @@ struct UploadForm {
 }
 
 /// Starting a new zip print from local file
-#[post("/start/{f_type}/{placing}")]
+#[post("/start/{placing}")]
 pub async fn start_print(
-    path: web::Path<(String, String)>,
+    path: web::Path<String>,
     state: web::Data<RESTPrinterState>,
     MultipartForm(form): MultipartForm<UploadForm>,
 ) -> impl Responder {
@@ -41,33 +41,41 @@ pub async fn start_print(
         );
     }
 
-    let mut file_handler = None;
-    let file = match path.1.as_str() {
+    let mut _file_handler = None;
+    let (file, ext) = match path.as_str() {
         "remote" => {
-            let Some(file) = form.file else {
+            let Some(file) = &form.file else {
                 return HttpResponse::BadRequest()
                     .json(json!({"message": "You need to pass a file"}));
             };
 
             let p = file.file.path().to_path_buf();
-            file_handler = Some(file);
-            p
+
+            _file_handler = Some(file);
+            (
+                p,
+                file.file_name
+                    .as_ref()
+                    .map(|f| f.split('.').last())
+                    .flatten(),
+            )
         },
         "local" => {
-            let Some(path) = form.local_file else {
+            let Some(path) = &form.local_file else {
                 return HttpResponse::BadRequest()
                     .json(json!({"message": "You need to specify file path"}));
             };
-            PathBuf::from(path.0)
+
+            (PathBuf::from(&path.0), path.0.split('.').last())
         },
         _ => return HttpResponse::BadRequest().json(json!({"message": "Invalid placing"})),
     };
 
-    let model_res = match path.0.as_str() {
-        "zip" => load_zip_model(file).await,
-        "photon" => load_photon_model(file).await,
-        _ => return HttpResponse::BadRequest().json(json!({"message": "Unknown file format"})),
+    let Some(ext) = ext else {
+        return HttpResponse::BadRequest().json(json!({"message": "Cannot determine model type"}));
     };
+
+    let model_res = load_model_with_ext(file, ext).await;
 
     let model = match model_res {
         Ok(m) => m,
@@ -75,8 +83,6 @@ pub async fn start_print(
             return HttpResponse::BadRequest().json(json!({"message": format!("{}", e)}));
         },
     };
-
-    drop(file_handler);
 
     match state
         .command_tx

@@ -57,27 +57,16 @@ pub struct MoveTo {
 
 #[derive(Parser, Debug)]
 pub struct ModelInfoArgs {
-     #[arg(long, help = "Zip model extension", conflicts_with_all = ["photon"])]
-    pub zip: bool,
-
-    #[arg(long, help = "Photon model extension", conflicts_with_all = ["zip"])]
-    pub photon: bool,
-
     #[arg(long, help = "Path to the model")]
     pub path: String,
 }
 
 #[derive(Parser, Debug)]
 pub struct StartArgs {
-    #[arg(long, help = "Zip model extension", conflicts_with_all = ["photon"])]
-    pub zip: bool,
-
-    #[arg(long, help = "Photon model extension", conflicts_with_all = ["zip"])]
-    pub photon: bool,
-
-    #[arg(long, conflicts_with = "remote", help = "Path to file on printer")]
+    #[arg(long, conflicts_with = "remote", help = "Path to file on printer", conflicts_with_all = ["local"])]
     pub local: Option<String>,
-    #[arg(long, conflicts_with = "local", help = "Path to file on this device")]
+
+    #[arg(long, conflicts_with = "local", help = "Path to file on this device", conflicts_with_all = ["remote"])]
     pub remote: Option<String>,
 
     #[arg(long, help = "Do not shutdown status")]

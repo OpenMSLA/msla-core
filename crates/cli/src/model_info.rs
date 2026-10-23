@@ -3,22 +3,11 @@ use std::time::Duration;
 use crate::status::format_duration;
 use anyhow::Result;
 use colored::Colorize;
-use msla_core::{
-    model_parser::{photon::load_photon_model, zip::load_zip_model},
-    types::cli::args::ModelInfoArgs,
-};
-use tracing::error;
+use msla_core::{model_parser::load_model, types::cli::args::ModelInfoArgs};
 
 /// Loads and prints model info
 pub async fn print_model_info(model_info_args: &ModelInfoArgs) -> Result<()> {
-    let model = if model_info_args.zip {
-        load_zip_model(model_info_args.path.clone()).await?
-    } else if model_info_args.photon {
-        load_photon_model(model_info_args.path.clone()).await?
-    } else {
-        error!("Please, provide file extension");
-        return Ok(());
-    };
+    let model = load_model(model_info_args.path.clone()).await?;
 
     let lines = [
         format!(

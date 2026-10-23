@@ -68,8 +68,8 @@ pub async fn add_to_context(label: &str) -> Result<()> {
         let (cmd_key, _) = key.create_subkey("command")?;
 
         let command = format!(
-            r#""{}" {} --scan-port {} --from-context-menu start --{} --remote "%1""#,
-            target_exe_str, alt_scan, port, ext
+            r#""{}" {} --scan-port {} --from-context-menu start --remote "%1""#,
+            target_exe_str, alt_scan, port
         );
         cmd_key.set_value("", &command)?;
     }

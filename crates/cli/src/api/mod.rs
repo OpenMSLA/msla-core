@@ -22,20 +22,6 @@ impl PlacingType {
     }
 }
 
-pub enum FileExt {
-    Zip,
-    Photon,
-}
-
-impl FileExt {
-    pub fn to_str(&self) -> &str {
-        match self {
-            FileExt::Zip => "zip",
-            FileExt::Photon => "photon",
-        }
-    }
-}
-
 pub struct ApiService {
     client: Client,
     pub url: String,
@@ -77,18 +63,8 @@ impl ApiService {
     }
 
     /// Generic start print function
-    pub async fn start_print(
-        &self,
-        placing_type: PlacingType,
-        file_ext: FileExt,
-        path: PathBuf,
-    ) -> Result<()> {
-        let url = format!(
-            "{}/start/{}/{}",
-            self.url,
-            file_ext.to_str(),
-            placing_type.to_str()
-        );
+    pub async fn start_print(&self, placing_type: PlacingType, path: PathBuf) -> Result<()> {
+        let url = format!("{}/start/{}", self.url, placing_type.to_str());
 
         let mut form = Form::new();
         match placing_type {
