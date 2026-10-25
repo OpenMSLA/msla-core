@@ -1,6 +1,7 @@
+use anyhow::Result;
 use std::{sync::Arc, time::Instant};
 
-use crate::{lcd::LCDController, peripheral::PeripheralController};
+use crate::{RUNTIME_CONFIG, lcd::LCDController, peripheral::PeripheralController};
 use msla_core::{
     config,
     types::{
@@ -29,16 +30,25 @@ pub struct PrinterTask {
 
     peripheral_controller: PeripheralController,
     lcd_controller: LCDController,
+
+    z_level_offset: f64,
 }
 
 impl PrinterTask {
-    pub fn new(
+    pub async fn new(
         state_sender: Sender<PrinterState>,
         printing_model: Arc<Model>,
         peripheral_controller: PeripheralController,
         lcd_controller: LCDController,
-    ) -> Self {
-        Self {
+    ) -> Result<Self> {
+        let z_offset = RUNTIME_CONFIG
+            .config()?
+            .read()
+            .await
+            .leveling
+            .bed_level_offset;
+
+        Ok(Self {
             state_sender,
             printing_model,
             peripheral_controller,
@@ -48,7 +58,8 @@ impl PrinterTask {
             current_ir_index: 0,
             current_ir_elapsed: Instant::now(),
             total_elapsed: Instant::now(),
-        }
+            z_level_offset: z_offset,
+        })
     }
 
     pub async fn run(&mut self, mut command_receiver: Receiver<PrinterCommand>) {
@@ -119,15 +130,21 @@ impl PrinterTask {
             PrintingIR::Home => {
                 debug!("Homing Z...");
                 self.peripheral_controller
-                    .home_z()
+                    .home_z(self.z_level_offset)
                     .await
                     .map_err(|e| PrintingError::new(format!("Cannot home Z axis: {e}")))?;
             },
 
             PrintingIR::MoveZ(mov) => {
-                debug!("Move Z to {}mm, speed: {}mm/m", mov.pos, mov.speed);
+                let mut pos = mov.pos;
+                if matches!(mov.positioning, StepperPositioning::Absolute) {
+                    pos += self.z_level_offset;
+                }
+
+                debug!("Move Z to {}mm, speed: {}mm/m", pos, mov.speed);
+
                 self.peripheral_controller
-                    .move_z_to(mov.pos, mov.speed, mov.positioning)
+                    .move_z_to(pos, mov.speed, mov.positioning)
                     .await
                     .map_err(|e| PrintingError::new(format!("Cannot move Z axis: {e}")))?;
             },
@@ -205,7 +222,7 @@ impl PrinterTask {
             .move_z_to(5f64, 40f64, StepperPositioning::Relative)
             .await;
 
-        // QWe quickly rise to the topuickly rise to the top
+        // We quickly rise to the top
         let _ = peripheral_controller
             .move_z_to(
                 config.physical.machine_height as f64,

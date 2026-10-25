@@ -142,8 +142,8 @@ impl UARTPacket {
         ))
     }
 
-    /// Read next double
-    pub fn read_double(&mut self) -> Option<f64> {
+    /// Read next f64
+    pub fn read_f64(&mut self) -> Option<f64> {
         let pos = self.extend_reader(8);
         Some(f64::from_le_bytes(
             self.payload.get(pos..pos + 8)?.try_into().ok()?,
@@ -180,9 +180,10 @@ impl UARTPacket {
     /// Write string
     ///
     /// Buffer layout: <len u16> <bytes>
-    pub fn write_string(&mut self, str: String) {
-        self.write_u16(str.len() as u16);
-        self.payload.extend(str.bytes());
+    pub fn write_string(&mut self, str: impl Into<String>) {
+        let s = str.into();
+        self.write_u16(s.len() as u16);
+        self.payload.extend(s.bytes());
     }
 
     /// Extends packet from other's packet data

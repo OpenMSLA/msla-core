@@ -48,7 +48,7 @@ fn set_console_visible(visible: bool) {}
 
 /// --------------------- DYN CONFIG THINGS --------------------
 
-static CONFIG: DynConfig<CliDynConfigType> = DynConfig::new();
+static CONFIG: DynConfig<CliDynConfigType> = DynConfig::new("OpenMSLA");
 
 #[tokio::main]
 async fn main() -> Result<()> {

@@ -22,7 +22,7 @@ impl PeripheralController {
     }
 
     /// Home Z axis
-    pub async fn home_z(&self) -> Result<UARTPacket> {
+    pub async fn home_z(&self, _offset: f64) -> Result<UARTPacket> {
         Ok(UARTPacket::new_empty(57))
     }
 

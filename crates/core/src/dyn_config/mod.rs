@@ -10,6 +10,7 @@ use tokio::{fs, sync::RwLock};
 
 pub struct DynConfig<T> {
     inner: OnceLock<Arc<RwLock<T>>>,
+    path: &'static str,
 }
 
 impl<T> DynConfig<T>
@@ -17,17 +18,18 @@ where
     T: Serialize + for<'de> Deserialize<'de> + Default,
 {
     /// Create new dyn config
-    pub const fn new() -> Self {
+    pub const fn new(path: &'static str) -> Self {
         Self {
             inner: OnceLock::new(),
+            path,
         }
     }
 
     /// Get path of dynamic user config
-    fn get_config_path() -> PathBuf {
+    fn get_config_path(&self) -> PathBuf {
         dirs::config_dir()
             .unwrap()
-            .join("OpenMSLA")
+            .join(&self.path)
             .join("config.toml")
     }
 
@@ -38,7 +40,7 @@ where
 
     /// Save config into file
     pub async fn write_config(&self, conf: &T) -> Result<()> {
-        let path = Self::get_config_path();
+        let path = self.get_config_path();
         fs::create_dir_all(path.parent().unwrap()).await?;
         fs::write(path, toml::to_string_pretty(conf)?).await?;
 
@@ -55,7 +57,7 @@ where
 
     /// Inits the config
     pub async fn init_config(&self) -> Result<()> {
-        let config = match fs::read_to_string(Self::get_config_path()).await {
+        let config = match fs::read_to_string(self.get_config_path()).await {
             Ok(content) => {
                 let value: toml::Value = toml::from_str(&content)?;
                 let config: T = value.clone().try_into()?;

@@ -6,6 +6,7 @@ use crate::{
 use anyhow::{Result, anyhow};
 use msla_core::types::peripheral::StepperPositioning;
 use std::{sync::Arc, time::Duration};
+use tracing::debug;
 
 #[derive(Clone)]
 pub struct PeripheralController {
@@ -34,10 +35,14 @@ impl PeripheralController {
         Ok(())
     }
 
-    /// Home Z axis
-    pub async fn home_z(&self) -> Result<UARTPacket> {
+    /// Home Z axis and precise to a offset
+    pub async fn home_z(&self, offset: f64) -> Result<()> {
         self.uart
             .request(UARTPacket::new(56, &[]), Duration::from_secs(150), 3)
+            .await?;
+
+        debug!("Precising Z pos to a {offset}mm...");
+        self.move_z_to(offset, 30.0, StepperPositioning::Absolute)
             .await
     }
 
@@ -130,7 +135,7 @@ impl PeripheralController {
         Ok(PhysicalState {
             uv_state: res.read_bool().ok_or(anyhow!("Cannot extract uv state"))?,
             z_pos: res
-                .read_double()
+                .read_f64()
                 .ok_or(anyhow!("Cannot extract stepper pos"))?,
         })
     }

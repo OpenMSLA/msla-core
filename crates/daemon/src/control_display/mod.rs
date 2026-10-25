@@ -2,14 +2,18 @@ use std::{net::IpAddr, thread};
 
 use anyhow::{Result, anyhow};
 use local_ip_address::local_ip;
-use msla_core::types::printer_manager::{PrinterCommand, PrinterState};
+use msla_core::{
+    modify_config,
+    types::printer_manager::{PrinterCommand, PrinterState},
+};
 use tokio::{
     runtime::Runtime,
     sync::{mpsc::Sender, watch::Receiver},
 };
-use tracing::error;
+use tracing::{error, info};
 
 use crate::{
+    RUNTIME_CONFIG,
     control_display::{
         general_status::{build_general_status_response, build_model_info},
         preview_loader::get_preview_bytes,
@@ -162,6 +166,48 @@ fn handle_command(
             None
         },
 
+        // Home leveling move command
+        60 => {
+            if !state.borrow().is_busy() {
+                let pos = packet.read_f64().ok_or(anyhow!("can't parse"))?;
+                let _ = sender.blocking_send(PrinterCommand::MoveTo { pos, speed: 10.0 });
+            }
+
+            None
+        },
+
+        // Save home leveling
+        62 => {
+            let mut p = UARTPacket::new_empty(packet.packet_id + 1);
+            if !state.borrow().is_busy() {
+                let pos = packet.read_f64().ok_or(anyhow!("can't parse"))?;
+
+                let res: anyhow::Result<()> = tokio_rt.block_on(async {
+                    modify_config!(RUNTIME_CONFIG, leveling.bed_level_offset = pos);
+                    RUNTIME_CONFIG.store_config().await?;
+
+                    Ok(())
+                });
+
+                match res {
+                    Ok(_) => {
+                        info!("Config stored!");
+                        p.write_u8(0);
+                    },
+                    Err(e) => {
+                        error!("Cannot store config: {e}");
+                        p.write_u8(1);
+                        p.write_string(e.to_string());
+                    },
+                }
+            } else {
+                p.write_u8(1);
+                p.write_string("Printer is busy");
+            }
+
+            Some(p)
+        },
+
         // List dir
         70 => {
             let entry_id = packet.read_u16().ok_or(anyhow!("can't parse"))?;
@@ -195,9 +241,8 @@ fn handle_command(
                 Err(e) => {
                     p.write_u8(1); // Error
 
-                    let e_str = e.to_string();
-                    error!("Cannot get model info print: {}", e_str);
-                    p.write_string(e_str);
+                    error!("Cannot get model info print: {e}");
+                    p.write_string(e.to_string());
                 },
             }
 
@@ -245,7 +290,7 @@ fn handle_command(
 
             if state.borrow().is_busy() {
                 p.write_u8(1);
-                p.write_string("Cannot start print: Printer is busy".to_string());
+                p.write_string("Cannot start print: Printer is busy");
                 return Ok(Some(p));
             }
 

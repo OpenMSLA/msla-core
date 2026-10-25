@@ -1,10 +1,12 @@
 pub mod printer_task;
 
 use crate::{
+    RUNTIME_CONFIG,
     lcd::LCDController,
     peripheral::PeripheralController,
     printer_manager::printer_task::PrinterTask,
 };
+use anyhow::Result;
 use msla_core::types::{
     model::Model,
     peripheral::StepperPositioning,
@@ -55,15 +57,27 @@ impl PrinterManager {
     }
 
     /// Run printer manager instance
-    pub async fn run(&mut self) {
+    pub async fn run(&mut self) -> Result<()> {
         info!("Started Printer Manager");
         info!("Waiting for incoming commands...");
+
+        let z_offset = RUNTIME_CONFIG
+            .config()?
+            .read()
+            .await
+            .leveling
+            .bed_level_offset;
 
         loop {
             tokio::select! {
                 Some(command) = self.command_receiver.recv() => {
                     match command {
-                        PrinterCommand::StartPrint(model) => self.start_print(model),
+                        PrinterCommand::StartPrint(model) => {
+                            if let Err(e) = self.start_print(model).await {
+                                error!("Cannot start print: {e}");
+                                self.state = PrinterState::Error(PrintingError::new(e.to_string()))
+                            }
+                        },
                         PrinterCommand::Abort |
                         PrinterCommand::Pause |
                         PrinterCommand::Resume =>
@@ -71,7 +85,7 @@ impl PrinterManager {
 
                         PrinterCommand::Home => {
                             let _ = self.state_transmitter.send(PrinterState::Busy);
-                            let _ = self.peripheral_controller.home_z().await;
+                            let _ = self.peripheral_controller.home_z(z_offset).await;
                             let _ = self.state_transmitter.send(PrinterState::Idle);
                         },
                         PrinterCommand::DisableStepper => {
@@ -129,7 +143,7 @@ impl PrinterManager {
     }
 
     /// Create Printer Task and start printing
-    fn start_print(&mut self, model: Arc<Model>) {
+    async fn start_print(&mut self, model: Arc<Model>) -> Result<()> {
         let (command_tx, command_rx) = mpsc::channel::<PrinterCommand>(128);
         let (state_tx, state_rx) = watch::channel(PrinterState::Idle);
 
@@ -138,10 +152,13 @@ impl PrinterManager {
 
         let per = self.peripheral_controller.clone();
         let lcd = self.lcd_controller.clone();
+
+        let mut task = PrinterTask::new(state_tx, model, per, lcd).await?;
         tokio::spawn(async move {
-            let mut task = PrinterTask::new(state_tx, model, per, lcd);
             task.run(command_rx).await;
         });
+
+        Ok(())
     }
 
     /// Clear all communications with print task

@@ -17,9 +17,13 @@ use std::{
 use anyhow::Result;
 use msla_core::{
     config,
+    dyn_config::DynConfig,
     logging,
     shutdown::shutdown_signal,
-    types::printer_manager::{PrinterCommand, PrinterState},
+    types::{
+        dyn_config::DaemonDynConfigType,
+        printer_manager::{PrinterCommand, PrinterState},
+    },
 };
 use tokio::sync::{Notify, mpsc, watch};
 use tracing::{Level, error, info};
@@ -36,8 +40,12 @@ use crate::{
     usb_service::start_usb_service,
 };
 
+pub static RUNTIME_CONFIG: DynConfig<DaemonDynConfigType> = DynConfig::new("msla_daemon_config");
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    RUNTIME_CONFIG.init_config().await?;
+
     // Set up logger
     let reload_handle = logging::init_logger(tracing::Level::DEBUG, true);
 
@@ -121,10 +129,14 @@ async fn main() -> Result<()> {
         PrinterManager::new(command_rx, state_tx, peripheral_controller, lcd_controller);
 
     tokio::select! {
-        _ = printer.run() => {},
+        r = printer.run() => match r {
+            Err(e) => error!("{e}"),
+            _ => {}
+        },
         _ = shutdown_notify.notified() => {
             info!("Shutting down the server...");
         }
     }
+
     Ok(())
 }
