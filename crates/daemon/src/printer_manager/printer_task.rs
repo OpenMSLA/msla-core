@@ -127,7 +127,7 @@ impl PrinterTask {
             PrintingIR::MoveZ(mov) => {
                 debug!("Move Z to {}mm, speed: {}mm/m", mov.pos, mov.speed);
                 self.peripheral_controller
-                    .move_z_to(mov.pos, mov.speed, StepperPositioning::Absolute)
+                    .move_z_to(mov.pos, mov.speed, mov.positioning)
                     .await
                     .map_err(|e| PrintingError::new(format!("Cannot move Z axis: {e}")))?;
             },

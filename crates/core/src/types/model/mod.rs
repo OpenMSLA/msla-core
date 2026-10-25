@@ -1,4 +1,7 @@
-use crate::types::model::ir::{PrintingIR, TimedIR};
+use crate::types::{
+    model::ir::{PrintingIR, TimedIR},
+    peripheral::StepperPositioning,
+};
 use std::{path::PathBuf, sync::Arc, time::Duration};
 use tempfile::TempDir;
 pub mod ir;
@@ -52,7 +55,11 @@ impl Model {
 
             if let PrintingIR::MoveZ(mov) = &mut m.ir {
                 mov._last_pos = pos;
-                pos = mov.pos;
+
+                match mov.positioning {
+                    StepperPositioning::Absolute => pos = mov.pos,
+                    StepperPositioning::Relative => pos += mov.pos,
+                }
             }
         }
         let mut duration = Duration::ZERO;

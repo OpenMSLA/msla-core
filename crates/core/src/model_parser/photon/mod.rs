@@ -13,6 +13,7 @@ use crate::{
             ir::{PrintingIR, ZMoving},
         },
         model_parser::photon::{PhotonFileHeader, PhotonFileLayer},
+        peripheral::StepperPositioning,
     },
 };
 use anyhow::{Result, anyhow};
@@ -279,12 +280,14 @@ pub async fn load_photon_model(photon_path: impl AsRef<std::path::Path>) -> Resu
         command_vec.push(PrintingIR::MoveZ(ZMoving::new(
             (layer.height + lift_distance) as f64,
             lift_speed as f64,
+            StepperPositioning::Absolute,
         )));
 
         // --- Move z to layer height ---
         command_vec.push(PrintingIR::MoveZ(ZMoving::new(
             layer.height as f64,
             header.retract_speed as f64,
+            StepperPositioning::Absolute,
         )));
 
         // ------- Turn UV on --------
@@ -302,10 +305,10 @@ pub async fn load_photon_model(photon_path: impl AsRef<std::path::Path>) -> Resu
     command_vec.push(PrintingIR::TurnUV(false));
 
     // Slowly raise Z a little
-    let last_layer_height = layers.last().map(|l| l.height).unwrap_or_default();
     command_vec.push(PrintingIR::MoveZ(ZMoving::new(
-        (last_layer_height + 5.0) as f64,
+        5.0,
         30.0,
+        StepperPositioning::Relative,
     )));
 
     // Fast raise Z to the end
@@ -314,6 +317,7 @@ pub async fn load_photon_model(photon_path: impl AsRef<std::path::Path>) -> Resu
     command_vec.push(PrintingIR::MoveZ(ZMoving::new(
         config.physical.machine_height as f64,
         300.0,
+        StepperPositioning::Absolute,
     )));
 
     // And, finally, disable stepper

@@ -1,5 +1,7 @@
 use std::{borrow::Cow, ffi::OsStr, fmt, path::PathBuf, time::Duration};
 
+use crate::types::peripheral::StepperPositioning;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum PrintingIR {
     Home,
@@ -23,14 +25,16 @@ pub struct ZMoving {
     pub pos: f64,
     pub speed: f64,
     pub _last_pos: f64,
+    pub positioning: StepperPositioning,
 }
 
 impl ZMoving {
-    pub fn new(pos: f64, speed: f64) -> Self {
+    pub fn new(pos: f64, speed: f64, positioning: StepperPositioning) -> Self {
         Self {
             pos,
             speed,
             _last_pos: 0.0,
+            positioning,
         }
     }
 }

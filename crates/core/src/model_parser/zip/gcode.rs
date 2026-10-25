@@ -1,6 +1,9 @@
-use crate::types::model::{
-    GlobalPrintingMeta,
-    ir::{PrintingIR, TimedIR, ZMoving},
+use crate::types::{
+    model::{
+        GlobalPrintingMeta,
+        ir::{PrintingIR, TimedIR, ZMoving},
+    },
+    peripheral::StepperPositioning,
 };
 use anyhow::{Result, anyhow};
 use std::{cmp::max, path::Path, str::SplitWhitespace, time::Duration};
@@ -16,6 +19,8 @@ pub struct GCodeParser {
     pub meta: GlobalPrintingMeta,
 
     layer_counter: usize,
+    positioning: StepperPositioning,
+    last_move_speed: f64,
 }
 
 impl GCodeParser {
@@ -24,6 +29,8 @@ impl GCodeParser {
             ir: Vec::new(),
             meta: GlobalPrintingMeta::default(),
             layer_counter: 0,
+            positioning: StepperPositioning::Absolute,
+            last_move_speed: 50.0,
         }
     }
 
@@ -57,7 +64,10 @@ impl GCodeParser {
                 "G28" => self.ir.push(PrintingIR::Home.to_timed_ir()),
 
                 // absolute pos
-                "G90" => {},
+                "G90" => self.positioning = StepperPositioning::Absolute,
+
+                // relative pos
+                "G91" => self.positioning = StepperPositioning::Relative,
 
                 // Enable steppers
                 "M17" => self.ir.push(PrintingIR::EnableSteppers.to_timed_ir()),
@@ -123,8 +133,19 @@ impl GCodeParser {
         // If no Z-axis command is found in the current G-code, skip it
         let Some(pos) = z_pos else { return };
 
-        self.ir
-            .push(PrintingIR::MoveZ(ZMoving::new(pos, z_speed.unwrap_or(50.0))).to_timed_ir())
+        if let Some(speed) = z_speed {
+            // Memorize speed for "sticky" effect
+            self.last_move_speed = speed;
+        }
+
+        self.ir.push(
+            PrintingIR::MoveZ(ZMoving::new(
+                pos,
+                z_speed.unwrap_or(self.last_move_speed),
+                self.positioning.clone(),
+            ))
+            .to_timed_ir(),
+        )
     }
 
     /// Parse dwell
