@@ -8,8 +8,13 @@ use crate::{
 use anyhow::Result;
 use clap::Parser;
 use msla_core::{
+    dyn_config::DynConfig,
     logging,
-    types::cli::args::{Args, Command},
+    modify_config,
+    types::cli::{
+        args::{Args, Command},
+        dyn_config::CliDynConfigType,
+    },
 };
 use notify_rust::{Notification, Urgency};
 use std::{path::PathBuf, process};
@@ -17,7 +22,6 @@ use tracing::{error, info};
 
 mod api;
 mod context;
-mod dyn_config;
 mod model_info;
 mod printer_selector;
 mod search;
@@ -42,10 +46,14 @@ fn set_console_visible(visible: bool) {
 #[cfg(not(windows))]
 fn set_console_visible(visible: bool) {}
 
+/// --------------------- DYN CONFIG THINGS --------------------
+
+static CONFIG: DynConfig<CliDynConfigType> = DynConfig::new();
+
 #[tokio::main]
 async fn main() -> Result<()> {
     logging::init_logger(tracing::Level::INFO, false);
-    dyn_config::init_config().await?;
+    CONFIG.init_config().await?;
     let args = Args::parse();
 
     if args.from_context_menu {
@@ -90,8 +98,10 @@ async fn execute(args: &Args) -> Result<()> {
 
         Command::ChangeConfig(config) => {
             match config.always_alt_scan.as_deref() {
-                Some("true") | Some("t") => modify_config!(connectivity.alt_default = true),
-                Some("false") | Some("f") => modify_config!(connectivity.alt_default = false),
+                Some("true") | Some("t") => modify_config!(CONFIG, connectivity.alt_default = true),
+                Some("false") | Some("f") => {
+                    modify_config!(CONFIG, connectivity.alt_default = false)
+                },
                 Some(_) => {
                     error!("Cannot parse `always_alt_scan`. Use `true` | `false`");
                     process::exit(-1);
@@ -100,19 +110,19 @@ async fn execute(args: &Args) -> Result<()> {
             }
 
             if let Some(port) = config.default_port {
-                modify_config!(connectivity.default_port = port);
+                modify_config!(CONFIG, connectivity.default_port = port);
             }
 
             if let Some(port) = config.default_scan_port {
-                modify_config!(connectivity.default_scan_port = port);
+                modify_config!(CONFIG, connectivity.default_scan_port = port);
             }
 
-            dyn_config::write_config(&*dyn_config::config()?.read().await).await?;
+            CONFIG.store_config().await?;
             info!("Config updated!");
         },
 
         command => {
-            let config = dyn_config::config()?.read().await;
+            let config = CONFIG.config()?.read().await;
             let host = match args.host.clone() {
                 Some(host) => host,
                 None => {

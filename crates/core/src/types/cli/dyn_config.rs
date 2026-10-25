@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct DynConfig {
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+pub struct CliDynConfigType {
     pub connectivity: Connectivity,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Connectivity {
     #[serde(default)]
     pub alt_default: bool,
