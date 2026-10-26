@@ -61,13 +61,6 @@ impl PrinterManager {
         info!("Started Printer Manager");
         info!("Waiting for incoming commands...");
 
-        let z_offset = RUNTIME_CONFIG
-            .config()?
-            .read()
-            .await
-            .leveling
-            .bed_level_offset;
-
         loop {
             tokio::select! {
                 Some(command) = self.command_receiver.recv() => {
@@ -84,6 +77,12 @@ impl PrinterManager {
                             self.send_to_print_task(command).await,
 
                         PrinterCommand::Home => {
+                            let z_offset = RUNTIME_CONFIG
+                                .config()?
+                                .read()
+                                .await
+                                .leveling
+                                .bed_level_offset;
                             let _ = self.state_transmitter.send(PrinterState::Busy);
                             let _ = self.peripheral_controller.home_z(z_offset).await;
                             let _ = self.state_transmitter.send(PrinterState::Idle);

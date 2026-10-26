@@ -168,12 +168,18 @@ fn handle_command(
 
         // Home leveling move command
         60 => {
+            let mut p = UARTPacket::new_empty(packet.packet_id + 1);
             if !state.borrow().is_busy() {
                 let pos = packet.read_f64().ok_or(anyhow!("can't parse"))?;
-                let _ = sender.blocking_send(PrinterCommand::MoveTo { pos, speed: 10.0 });
+                let _ = sender.blocking_send(PrinterCommand::MoveTo { pos, speed: 30.0 });
+
+                p.write_u8(0);
+                p.write_f32(pos as f32); // Return latest targeted pos
+            } else {
+                p.write_u8(1);
             }
 
-            None
+            Some(p)
         },
 
         // Save home leveling

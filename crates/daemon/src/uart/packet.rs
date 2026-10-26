@@ -149,6 +149,14 @@ impl UARTPacket {
             self.payload.get(pos..pos + 8)?.try_into().ok()?,
         ))
     }
+
+    /// Read next f32
+    pub fn read_f32(&mut self) -> Option<f32> {
+        let pos = self.extend_reader(4);
+        Some(f32::from_le_bytes(
+            self.payload.get(pos..pos + 4)?.try_into().ok()?,
+        ))
+    }
 }
 
 impl UARTPacket {

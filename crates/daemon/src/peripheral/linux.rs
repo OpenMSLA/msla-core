@@ -67,7 +67,7 @@ impl PeripheralController {
             .uart
             .request(
                 UARTPacket::new(50, &buf),
-                Duration::from_secs_f64((pos / (speed / 60.0)) + 30.0),
+                Duration::from_secs_f64((pos.abs() / (speed.abs() / 60.0)) + 30.0),
                 3,
             )
             .await?;
