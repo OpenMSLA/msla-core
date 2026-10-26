@@ -78,10 +78,20 @@ async fn main() -> Result<()> {
 
     // Start fan controlling cycle
     let fan_controller = peripheral_controller.clone();
-    tokio::spawn(async { start_fan(fan_controller).await });
+    tokio::spawn(async {
+        match start_fan(fan_controller).await {
+            Err(e) => error!("System fan service error: {e}"),
+            _ => {},
+        }
+    });
 
     // Start usb mounter service task
-    tokio::spawn(async { start_usb_service().await });
+    tokio::spawn(async {
+        match start_usb_service().await {
+            Err(e) => error!("Usb service error: {e}"),
+            _ => {},
+        }
+    });
 
     // Build and run REST API
     let rest = build_rest_api(

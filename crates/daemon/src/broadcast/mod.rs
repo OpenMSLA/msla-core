@@ -4,7 +4,7 @@ use tokio::net::UdpSocket;
 use tracing::{debug, error, info};
 
 /// Start broadcast listener
-pub async fn start_broadcast() -> Result<()> {
+pub async fn start_broadcast() {
     tokio::select! {
         res = broadcast() => {
             if let Err(e) = res {
@@ -15,8 +15,6 @@ pub async fn start_broadcast() -> Result<()> {
             info!("Stopping broadcast server");
         }
     }
-
-    Ok(())
 }
 
 async fn broadcast() -> Result<()> {

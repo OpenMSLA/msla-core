@@ -22,8 +22,8 @@ impl PeripheralController {
     }
 
     /// Home Z axis
-    pub async fn home_z(&self, _offset: f64) -> Result<UARTPacket> {
-        Ok(UARTPacket::new_empty(57))
+    pub async fn home_z(&self, _offset: f64) -> Result<()> {
+        Ok(())
     }
 
     /// Moves Z axis to a provided pos and with provided speed

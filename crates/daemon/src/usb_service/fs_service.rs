@@ -83,7 +83,7 @@ impl UsbFilesystem {
             anyhow::bail!("Invalid directory id: index not found: {dir_id}");
         };
 
-        if matches!(dir.file_type, FileEntryType::File) {
+        if !matches!(dir.file_type, FileEntryType::Dir) {
             anyhow::bail!("Not a dir");
         }
 
