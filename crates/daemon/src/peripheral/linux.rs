@@ -31,6 +31,7 @@ impl PeripheralController {
     /// Initialize/start code
     async fn init(&self) -> Result<()> {
         self.disable_steppers().await?;
+        self.turn_uv(false).await?;
 
         Ok(())
     }
