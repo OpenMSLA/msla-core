@@ -67,11 +67,41 @@ jobs:
             target/aarch64-unknown-linux-gnu/release/msla-daemon \
             "dist/msla-daemon-aarch64-unknown-linux-gnu"
 
+
+      - name: Generate changelog
+        shell: bash
+        run: |
+          CURRENT_TAG="${GITHUB_REF_NAME}"
+
+          git fetch --tags --force
+
+          PREVIOUS_TAG=$(git tag \
+            --list 'daemon-v*' \
+            --sort=-version:refname \
+            | grep -Fxv "$CURRENT_TAG" \
+            | head -n 1)
+
+          {
+            echo "## Changelog"
+            echo
+
+            if [[ -n "$PREVIOUS_TAG" ]]; then
+              RANGE="$PREVIOUS_TAG..$CURRENT_TAG"
+            else
+              RANGE="$CURRENT_TAG"
+            fi
+
+            git log "$RANGE" \
+              --pretty=format:"- %s ([%h](https://github.com/${GITHUB_REPOSITORY}/commit/%H))"
+
+            echo
+          } > release-notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: msla-daemon ${{ github.ref_name }}
-          generate_release_notes: true
+          body_path: release-notes.md
           files: |
             dist/msla-daemon-aarch64-unknown-linux-gnu
