@@ -77,23 +77,31 @@ impl PrinterManager {
                             self.send_to_print_task(command).await,
 
                         PrinterCommand::Home => {
-                            let z_offset = RUNTIME_CONFIG
-                                .config()?
-                                .read()
-                                .await
-                                .leveling
-                                .bed_level_offset;
-                            let _ = self.state_transmitter.send(PrinterState::Busy);
-                            let _ = self.peripheral_controller.home_z(z_offset).await;
-                            let _ = self.state_transmitter.send(PrinterState::Idle);
+                            let peripheral = self.peripheral_controller.clone();
+
+                            self.run_busy(async move {
+                                let z_offset = RUNTIME_CONFIG
+                                    .config()?
+                                    .read()
+                                    .await
+                                    .leveling
+                                    .bed_level_offset;
+
+                                peripheral.home_z(z_offset).await
+                            }).await
+
                         },
                         PrinterCommand::DisableStepper => {
-                            let _ = self.peripheral_controller.disable_steppers().await;
+                            let peripheral = self.peripheral_controller.clone();
+                            self.run_busy(async move {
+                                peripheral.disable_steppers().await
+                            }).await
                         },
                         PrinterCommand::MoveTo {pos, speed} => {
-                            let _ = self.state_transmitter.send(PrinterState::Busy);
-                            let _ = self.peripheral_controller.move_z_to(pos, speed, StepperPositioning::Absolute).await;
-                            let _ = self.state_transmitter.send(PrinterState::Idle);
+                            let peripheral = self.peripheral_controller.clone();
+                            self.run_busy(async move {
+                                peripheral.move_z_to(pos, speed, StepperPositioning::Absolute).await
+                            }).await
                         }
                     }
                 }
@@ -180,6 +188,30 @@ impl PrinterManager {
 
     /// Send current status to all external listeners
     async fn send_status(&mut self) {
-        let _ = self.state_transmitter.send(self.state.clone());
+        let _ = self.state_transmitter.send_replace(self.state.clone());
+    }
+
+    /// Sets current status and send to a channel
+    async fn set_and_send_status(&mut self, status: PrinterState) {
+        self.state = status;
+        self.send_status().await;
+    }
+
+    /// Runs async task and sets Busy state during exec.
+    async fn run_busy<F>(&mut self, op: F)
+    where
+        F: Future<Output = Result<()>>,
+    {
+        self.set_and_send_status(PrinterState::Busy).await;
+
+        let state = match op.await {
+            Ok(_) => PrinterState::Idle,
+            Err(e) => {
+                error!("Printer op failed: {e}");
+                PrinterState::Error(PrintingError::new(e.to_string()))
+            },
+        };
+
+        self.set_and_send_status(state).await;
     }
 }

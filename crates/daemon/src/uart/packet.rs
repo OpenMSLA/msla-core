@@ -159,6 +159,7 @@ impl UARTPacket {
     }
 }
 
+#[allow(unused)]
 impl UARTPacket {
     /// Write u16 to end of packet payload
     pub fn write_u16(&mut self, val: u16) {
