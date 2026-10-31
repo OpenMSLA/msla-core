@@ -81,7 +81,7 @@ fn handle_command(
             let mut p = UARTPacket::new_empty(packet.packet_id + 1);
             let ps = tokio_rt.block_on(peripheral.get_physical_state())?;
 
-            p.write_u8(if ps.uv_state { 1 } else { 0 });
+            p.write_u8(ps.uv_state as u8);
             p.write_f32(ps.z_pos as f32);
 
             Some(p)

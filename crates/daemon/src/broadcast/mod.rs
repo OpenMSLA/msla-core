@@ -24,10 +24,10 @@ async fn broadcast() -> Result<()> {
         config.broadcast_listener.port,
     ))
     .await?;
-    debug!("Listening udp broadcast");
+
+    info!("Started UDP broadcast server");
 
     let mut buf = [0u8; 1500];
-
     loop {
         let (len, addr) = socket.recv_from(&mut buf).await?;
         let packet = &buf[..len];

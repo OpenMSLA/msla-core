@@ -120,7 +120,7 @@ impl GCodeParser {
                     z_pos = chars.as_str().parse::<f64>().ok();
                 },
 
-                // Feedrate
+                // Feed rate
                 'F' => {
                     z_speed = chars.as_str().parse::<f64>().ok();
                 },

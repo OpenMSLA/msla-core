@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 /// FICTIVE WINDOWS REALIZATION
-use crate::{peripheral::PhysicalState, uart::packet::UARTPacket};
+use crate::peripheral::PhysicalState;
 use anyhow::Result;
 use msla_core::types::peripheral::StepperPositioning;
 

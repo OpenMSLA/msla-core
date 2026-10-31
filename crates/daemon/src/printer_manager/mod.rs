@@ -65,7 +65,7 @@ impl PrinterManager {
             tokio::select! {
                 Some(command) = self.command_receiver.recv() => {
                     match command {
-                        PrinterCommand::StartPrint(model) => {
+                        PrinterCommand::StartPrint(model) if !self.state.is_busy() => {
                             if let Err(e) = self.start_print(model).await {
                                 error!("Cannot start print: {e}");
                                 self.state = PrinterState::Error(PrintingError::new(e.to_string()))
@@ -76,7 +76,7 @@ impl PrinterManager {
                         PrinterCommand::Resume =>
                             self.send_to_print_task(command).await,
 
-                        PrinterCommand::Home => {
+                        PrinterCommand::Home if !self.state.is_busy() => {
                             let peripheral = self.peripheral_controller.clone();
 
                             self.run_busy(async move {
@@ -91,18 +91,16 @@ impl PrinterManager {
                             }).await
 
                         },
-                        PrinterCommand::DisableStepper => {
+                        PrinterCommand::DisableStepper if !self.state.is_busy() => {
                             let peripheral = self.peripheral_controller.clone();
-                            self.run_busy(async move {
-                                peripheral.disable_steppers().await
-                            }).await
+                            self.run_busy(peripheral.disable_steppers()).await
                         },
-                        PrinterCommand::MoveTo {pos, speed} => {
+                        PrinterCommand::MoveTo {pos, speed} if !self.state.is_busy() => {
                             let peripheral = self.peripheral_controller.clone();
-                            self.run_busy(async move {
-                                peripheral.move_z_to(pos, speed, StepperPositioning::Absolute).await
-                            }).await
+                            self.run_busy(peripheral.move_z_to(pos, speed, StepperPositioning::Absolute)).await
                         }
+
+                        _ => {}
                     }
                 }
 

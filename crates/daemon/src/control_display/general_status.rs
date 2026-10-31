@@ -83,9 +83,9 @@ pub fn build_general_status_response(
         },
         PrinterState::Busy => p.write_u8(4),
         PrinterState::Aborted => p.write_u8(5),
-        PrinterState::Finished { total_elapsed: te } => {
+        PrinterState::Finished { total_elapsed } => {
             p.write_u8(6);
-            p.write_u32(te.elapsed().as_secs() as u32);
+            p.write_u32(total_elapsed.elapsed().as_secs() as u32);
         },
     };
 
