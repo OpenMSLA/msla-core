@@ -1,7 +1,10 @@
 use anyhow::Result;
-use msla_core::config;
+use msla_core::{SUPPORTED_FILE_EXTENSIONS, config};
 use tokio::net::UdpSocket;
 use tracing::{debug, error, info};
+
+use crate::broadcast::data_writer::DataWriter;
+mod data_writer;
 
 /// Start broadcast listener
 pub async fn start_broadcast() {
@@ -45,15 +48,18 @@ async fn broadcast() -> Result<()> {
             0x01 => {
                 debug!("Discovery from {addr}");
 
-                let mut response: Vec<u8> = vec![0xAA, 0x55, 0x02];
-                response.push(config.global.machine_name.len() as u8);
-                response.extend_from_slice(config.global.machine_name.as_bytes());
+                let mut dw = DataWriter::new();
+                dw.payload.extend(&[0xAA, 0x55, 0x02]);
 
-                let ver = env!("CARGO_PKG_VERSION");
-                response.push(ver.len() as u8);
-                response.extend_from_slice(ver.as_bytes());
+                dw.write_string(&config.global.machine_name);
+                dw.write_string(env!("CARGO_PKG_VERSION"));
 
-                socket.send_to(&response, addr).await?;
+                dw.write_u8(SUPPORTED_FILE_EXTENSIONS.len() as u8);
+                for ext in SUPPORTED_FILE_EXTENSIONS {
+                    dw.write_string(ext);
+                }
+
+                socket.send_to(dw.send(), addr).await?;
             },
 
             _ => {
