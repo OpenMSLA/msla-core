@@ -7,6 +7,10 @@ use std::{
 use anyhow::Result;
 use tokio::{net::UdpSocket, sync::mpsc::UnboundedSender, time::sleep};
 
+use crate::search::data_reader::ByteReader;
+
+mod data_reader;
+
 const EXCLUDE_NAMES: [&str; 4] = ["vpn", "wsl", "loopback", "tun"];
 
 fn find_local_network() -> Option<(Ipv4Addr, u32)> {
@@ -128,31 +132,15 @@ pub async fn start_search(
         let mut buf = [0u8; 1500];
         loop {
             let received = socket.recv_from(&mut buf).await;
-            if let Ok((size, addr)) = received
-                && buf.starts_with(&[0xAA, 0x55, 0x02])
-            {
-                let mut reader = 3;
-                let name = buf
-                    .get(reader)
-                    .filter(|&&len| size >= 4 + len as usize)
-                    .and_then(|&len| {
-                        let len = (len + 1) as usize;
-                        let r = buf.get(reader + 1..reader + len);
-                        reader += len;
-                        r
-                    })
-                    .map(|bytes| String::from_utf8_lossy(bytes).into_owned());
+            if let Ok((size, addr)) = received {
+                let mut reader = ByteReader::from(&buf, size);
 
-                let ver = buf
-                    .get(reader)
-                    .filter(|&&len| size >= 4 + len as usize)
-                    .and_then(|&len| {
-                        let len = (len + 1) as usize;
-                        let r = buf.get(reader + 1..reader + len);
-                        reader += len;
-                        r
-                    })
-                    .map(|bytes| String::from_utf8_lossy(bytes).into_owned());
+                if !reader.validate_start_move() {
+                    continue;
+                }
+
+                let name = reader.read_string();
+                let ver = reader.read_string();
 
                 let _ = tx.send(FoundPrinter {
                     ip: addr.ip(),
