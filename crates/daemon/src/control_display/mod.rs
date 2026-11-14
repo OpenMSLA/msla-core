@@ -1,4 +1,9 @@
-use std::{net::IpAddr, thread};
+use std::{
+    io,
+    net::IpAddr,
+    thread::{self, sleep},
+    time::Duration,
+};
 
 use anyhow::{Result, anyhow};
 use local_ip_address::local_ip;
@@ -56,6 +61,21 @@ pub fn spawn_control_display_thread(
                 Ok(None) => continue,
                 Err(err) => {
                     error!("Failed to read from Uart: {:?}", err);
+
+                    match err.kind() {
+                        io::ErrorKind::BrokenPipe => {
+                            info!("Detected broken pipe error! Trying to reinit serial...");
+                            match uart.reinit() {
+                                Ok(_) => info!("Serial reinit success! Continue work..."),
+                                Err(e) => {
+                                    error!("Could not reinit serial: {e}");
+                                    sleep(Duration::from_secs(1));
+                                },
+                            }
+                        },
+
+                        _ => {},
+                    }
                     continue;
                 },
             }

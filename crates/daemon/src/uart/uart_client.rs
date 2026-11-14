@@ -1,20 +1,17 @@
 use crate::uart::{UARTCommand, Uart, packet::UARTPacket};
 use anyhow::{Result, anyhow};
 use std::{
-    collections::HashMap,
-    sync::{
+    collections::HashMap, io, sync::{
         Arc,
         OnceLock,
         mpsc::{self, Sender},
-    },
-    thread,
-    time::Duration,
+    }, thread::{self, sleep}, time::Duration,
 };
 use tokio::{
     sync::{Mutex, oneshot},
     time::timeout,
 };
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 #[cfg_attr(target_os = "windows", allow(dead_code))]
 pub struct UARTClient {
@@ -60,6 +57,21 @@ impl UARTClient {
                     Ok(None) => continue,
                     Err(err) => {
                         error!("Failed to read from Uart: {:?}", err);
+
+                        match err.kind() {
+                            io::ErrorKind::BrokenPipe => {
+                                info!("Detected broken pipe error! Trying to reinit serial...");
+                                match uart.reinit() {
+                                    Ok(_) => info!("Serial reinit success! Continue work..."),
+                                    Err(e) => {
+                                        error!("Could not reinit serial: {e}");
+                                        sleep(Duration::from_secs(1));
+                                    },
+                                }
+                            },
+
+                            _ => {},
+                        }
                         continue;
                     },
                 }
