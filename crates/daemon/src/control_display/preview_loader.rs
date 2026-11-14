@@ -119,6 +119,7 @@ const MASK: [[u8; R]; R] = [
 ];
 
 /// Apply all rounded corners
+#[allow(clippy::needless_range_loop)]
 fn apply_rounded_mask(img: &mut RgbImage, bg: Rgb<u8>) {
     let w = img.width() as usize;
     let h = img.height() as usize;

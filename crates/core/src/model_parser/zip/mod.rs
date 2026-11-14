@@ -24,9 +24,7 @@ pub async fn load_zip_model(zip_path: impl AsRef<std::path::Path>) -> Result<Arc
     let preview = if p.exists() { Some(p) } else { None };
 
     let path: &Path = zip_path.as_ref();
-    gparser.meta.file_name = path
-        .file_name()
-        .and_then(|n| Some(n.to_string_lossy().to_string()));
+    gparser.meta.file_name = path.file_name().map(|n| n.to_string_lossy().to_string());
 
     Ok(Arc::new(Model::new(
         gparser.ir,

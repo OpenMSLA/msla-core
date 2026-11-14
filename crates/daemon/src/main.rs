@@ -79,17 +79,15 @@ async fn main() -> Result<()> {
     // Start fan controlling cycle
     let fan_controller = peripheral_controller.clone();
     tokio::spawn(async {
-        match start_fan(fan_controller).await {
-            Err(e) => error!("System fan service error: {e}"),
-            _ => {},
+        if let Err(e) = start_fan(fan_controller).await {
+            error!("System fan service error: {e}")
         }
     });
 
     // Start usb mounter service task
     tokio::spawn(async {
-        match start_usb_service().await {
-            Err(e) => error!("Usb service error: {e}"),
-            _ => {},
+        if let Err(e) = start_usb_service().await {
+            error!("Usb service error: {e}")
         }
     });
 
@@ -139,10 +137,7 @@ async fn main() -> Result<()> {
         PrinterManager::new(command_rx, state_tx, peripheral_controller, lcd_controller);
 
     tokio::select! {
-        r = printer.run() => match r {
-            Err(e) => error!("{e}"),
-            _ => {}
-        },
+        r = printer.run() => if let Err(e) = r { error!("{e}") },
         _ = shutdown_notify.notified() => {
             info!("Shutting down the server...");
         }

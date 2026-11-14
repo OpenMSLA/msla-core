@@ -16,6 +16,7 @@ use tokio::{
 };
 use tracing::{error, warn};
 
+#[cfg_attr(target_os = "windows", allow(dead_code))]
 pub struct UARTClient {
     pub writer: OnceLock<Sender<UARTCommand>>,
 
@@ -23,6 +24,7 @@ pub struct UARTClient {
     pending: Mutex<HashMap<u8, oneshot::Sender<UARTPacket>>>,
 }
 
+#[cfg_attr(target_os = "windows", allow(dead_code))]
 impl UARTClient {
     /// Start polling to provided channel and from provided uart
     pub fn spawn_uart(self: Arc<Self>, mut uart: Uart) -> Result<()> {

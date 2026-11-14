@@ -33,6 +33,7 @@ pub struct UARTPacket {
 }
 
 impl UARTPacket {
+    #[allow(dead_code)]
     pub fn new(id: u8, payload: &[u8]) -> Self {
         Self {
             packet_id: id,

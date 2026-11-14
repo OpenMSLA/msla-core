@@ -29,7 +29,7 @@ where
     fn get_config_path(&self) -> PathBuf {
         dirs::config_dir()
             .unwrap()
-            .join(&self.path)
+            .join(self.path)
             .join("config.toml")
     }
 

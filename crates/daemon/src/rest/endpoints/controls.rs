@@ -56,8 +56,7 @@ pub async fn start_print(
                 p,
                 file.file_name
                     .as_ref()
-                    .map(|f| f.split('.').last())
-                    .flatten(),
+                    .and_then(|f| f.split('.').next_back()),
             )
         },
         "local" => {
@@ -66,7 +65,7 @@ pub async fn start_print(
                     .json(json!({"message": "You need to specify file path"}));
             };
 
-            (PathBuf::from(&path.0), path.0.split('.').last())
+            (PathBuf::from(&path.0), path.0.split('.').next_back())
         },
         _ => return HttpResponse::BadRequest().json(json!({"message": "Invalid placing"})),
     };

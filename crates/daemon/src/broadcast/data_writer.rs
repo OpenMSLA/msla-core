@@ -23,7 +23,7 @@ impl DataWriter {
     }
 
     /// Get writer data as bytes
-    pub fn send<'a>(&'a self) -> &'a [u8] {
+    pub fn send(&self) -> &[u8] {
         &self.payload
     }
 }

@@ -11,7 +11,6 @@ anyhow = { workspace = true }
 serialport = { workspace = true }
 tokio = { workspace = true }
 image = "0.25.10"
-memmap2 = "0.9"
 tempfile = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
@@ -26,6 +25,9 @@ regex = "1.13.1"
 local-ip-address = "0.6.13"
 deunicode = "1.6.2"
 mid = "5.0"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+memmap2 = "0.9"
 
 [lints]
 workspace = true

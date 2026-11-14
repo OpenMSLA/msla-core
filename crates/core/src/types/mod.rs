@@ -1,8 +1,8 @@
 pub mod cli;
 pub mod config;
+pub mod dyn_config;
 pub mod model;
 pub mod model_parser;
 pub mod peripheral;
 pub mod printer_manager;
 pub mod rest;
-pub mod dyn_config;

@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "windows", allow(unused))]
+
 use std::time::Duration;
 
 use anyhow::Result;

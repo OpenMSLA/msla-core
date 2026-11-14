@@ -4,11 +4,9 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::search::data_reader::ByteReader;
 use anyhow::Result;
 use tokio::{net::UdpSocket, sync::mpsc::UnboundedSender, time::sleep};
-
-use crate::search::data_reader::ByteReader;
-
 mod data_reader;
 
 const EXCLUDE_NAMES: [&str; 4] = ["vpn", "wsl", "loopback", "tun"];

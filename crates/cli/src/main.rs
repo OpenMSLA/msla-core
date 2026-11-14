@@ -46,7 +46,7 @@ fn set_console_visible(visible: bool) {
 #[cfg(not(windows))]
 fn set_console_visible(visible: bool) {}
 
-/// --------------------- DYN CONFIG THINGS --------------------
+// --------------------- DYN CONFIG THINGS --------------------
 
 static CONFIG: DynConfig<CliDynConfigType> = DynConfig::new("OpenMSLA");
 
