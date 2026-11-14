@@ -9,15 +9,15 @@
 ---
 <table align="center">
   <tr>
-    <td>
-      <img src="resources/irl.jpg" height="300">
+    <td rowspan="2">
+      <img src="resources/irl.jpg">
     </td>
     <td>
       <img src="resources/123.jpg" height="300">
     </td>
   </tr>
   <tr>
-    <td colspan="2">
+    <td>
       <img src="resources/benchy.jpg" width="100%">
     </td>
   </tr>
