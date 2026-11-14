@@ -16,12 +16,16 @@ tempfile = { workspace = true }
 serde = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-actix-web = "4.15.0"
+actix-web = "4.19.0"
 serde_json = { workspace = true }
-actix-files = "0.6"
+actix-files = "0.7.4"
 actix-multipart = "0.8.1"
 futures-util = "0.3"
-validator = { version = "0.19", features = ["derive"] }
+validator = { version = "0.21.0", features = ["derive"] }
 regex = "1.13.1"
 local-ip-address = "0.6.13"
 deunicode = "1.6.2"
+mid = "5.0"
+
+[lints]
+workspace = true

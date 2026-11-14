@@ -11,7 +11,7 @@ msla-core = { path = "../core" }
 anyhow = { workspace = true }
 tokio = { workspace = true }
 indicatif = "0.18.6"
-reqwest = { version = "0.12.12", features = [
+reqwest = { version = "0.13.5", features = [
     "native-tls",
     "native-tls-vendored",
     "multipart",
@@ -23,7 +23,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }
 colored = "3.0.0"
-if-addrs = "0.13"
+if-addrs = "0.15.0"
 dialoguer = "0.12.0"
 tokio-retry = "0.3.2"
 notify-rust = "4.18.0"
@@ -33,7 +33,7 @@ chrono = "0.4.45"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winreg = "0.56.0"
-windows = { version = "0.61", features = [
+windows = { version = "0.62.2", features = [
     "Win32_Foundation",
     "Win32_System_Console",
     "Win32_UI_WindowsAndMessaging",
@@ -41,3 +41,7 @@ windows = { version = "0.61", features = [
 
 [build-dependencies]
 winres = "0.1"
+
+
+[lints]
+workspace = true

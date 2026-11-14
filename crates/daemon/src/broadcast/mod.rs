@@ -54,6 +54,18 @@ async fn broadcast() -> Result<()> {
                 dw.write_string(&config.global.machine_name);
                 dw.write_string(env!("CARGO_PKG_VERSION"));
 
+                // HW hash needed for static printer identification
+                match mid::get("open-msla-non-secret-salt") {
+                    Ok(hash) => {
+                        println!("Static hash: {hash}");
+                        dw.write_string(hash)
+                    },
+                    Err(e) => {
+                        error!("Error generating static hw hash: {e}");
+                        dw.write_string("");
+                    },
+                };
+
                 dw.write_u8(SUPPORTED_FILE_EXTENSIONS.len() as u8);
                 for ext in SUPPORTED_FILE_EXTENSIONS {
                     dw.write_string(ext);
