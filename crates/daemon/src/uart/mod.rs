@@ -3,9 +3,7 @@ pub mod uart_client;
 use anyhow::{Result, anyhow};
 use serialport::SerialPort;
 use std::{
-    io,
-    thread,
-    time::{Duration, Instant},
+    io::{self, Error}, thread, time::{Duration, Instant},
 };
 use tracing::debug;
 
@@ -97,6 +95,8 @@ impl Uart {
                 Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {},
                 Err(e) => return Err(e.into()),
             }
+        } else {
+            return Err(Error::new(io::ErrorKind::BrokenPipe, "Serial not initialized"))
         }
 
         self.try_extract_packet()

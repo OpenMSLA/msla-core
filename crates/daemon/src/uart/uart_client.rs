@@ -1,11 +1,15 @@
 use crate::uart::{UARTCommand, Uart, packet::UARTPacket};
 use anyhow::{Result, anyhow};
 use std::{
-    collections::HashMap, io, sync::{
+    collections::HashMap,
+    io,
+    sync::{
         Arc,
         OnceLock,
         mpsc::{self, Sender},
-    }, thread::{self, sleep}, time::Duration,
+    },
+    thread::{self, sleep},
+    time::Duration,
 };
 use tokio::{
     sync::{Mutex, oneshot},
@@ -65,7 +69,7 @@ impl UARTClient {
                                     Ok(_) => info!("Serial reinit success! Continue work..."),
                                     Err(e) => {
                                         error!("Could not reinit serial: {e}");
-                                        sleep(Duration::from_secs(1));
+                                        sleep(Duration::from_secs(5));
                                     },
                                 }
                             },

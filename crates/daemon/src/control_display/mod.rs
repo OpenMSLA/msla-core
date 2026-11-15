@@ -69,7 +69,7 @@ pub fn spawn_control_display_thread(
                                 Ok(_) => info!("Serial reinit success! Continue work..."),
                                 Err(e) => {
                                     error!("Could not reinit serial: {e}");
-                                    sleep(Duration::from_secs(1));
+                                    sleep(Duration::from_secs(5));
                                 },
                             }
                         },
