@@ -30,7 +30,7 @@ use crate::{
 
 mod general_status;
 mod preview_loader;
-mod usb;
+pub mod usb;
 
 /// Create display thread
 pub fn spawn_control_display_thread(
@@ -60,7 +60,7 @@ pub fn spawn_control_display_thread(
                 },
                 Ok(None) => continue,
                 Err(err) => {
-                    error!("Failed to read from Uart: {:?}", err);
+                    error!("Failed to read from Uart: {err}");
 
                     match err.kind() {
                         io::ErrorKind::BrokenPipe => {

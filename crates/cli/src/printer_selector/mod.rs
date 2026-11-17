@@ -115,7 +115,7 @@ pub async fn run_selector(alt_scan: bool, port: u16) -> Result<FoundPrinter> {
     loop {
         tokio::select! {
             Some(printer) = rx.recv() => {
-                if let Some(p) = found.iter_mut().find(|p| p.ip == printer.ip) {
+                if let Some(p) = found.iter_mut().find(|p| p.hw_hash == printer.hw_hash) {
                     p._last_updated = Instant::now();
                 } else {
                     found.push(printer);

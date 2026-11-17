@@ -105,6 +105,7 @@ pub struct FoundPrinter {
     pub ip: IpAddr,
     pub name: Option<String>,
     pub ver: Option<String>,
+    pub hw_hash: Option<String>,
 
     pub _last_updated: Instant,
 }
@@ -139,11 +140,13 @@ pub async fn start_search(
 
                 let name = reader.read_string();
                 let ver = reader.read_string();
+                let hw_hash = reader.read_string();
 
                 let _ = tx.send(FoundPrinter {
                     ip: addr.ip(),
                     name,
                     ver,
+                    hw_hash,
                     _last_updated: Instant::now(),
                 });
             }

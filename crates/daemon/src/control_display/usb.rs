@@ -85,3 +85,13 @@ pub async fn load_fs_model(file_id: u16) -> Result<Arc<Model>> {
 
     Ok(model)
 }
+
+/// Invalidates cached model store
+pub async fn invalidate_model_cache() -> Result<()> {
+    let Some(mg) = CACHED_MODEL.get() else {
+        anyhow::bail!("Cache not loaded");
+    };
+
+    *mg.write().await = None;
+    Ok(())
+}

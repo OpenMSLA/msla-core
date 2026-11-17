@@ -9,7 +9,7 @@ use std::{
 use tokio::{fs, process::Command, time::sleep};
 use tracing::{error, info, warn};
 
-use crate::usb_service::fs_service::UsbFilesystem;
+use crate::{control_display::usb::invalidate_model_cache, usb_service::fs_service::UsbFilesystem};
 
 pub mod fs_service;
 
@@ -251,6 +251,11 @@ pub async fn start_usb_service() -> Result<()> {
                 let mut write_guard = fs.write().await;
                 write_guard.reinit(root_dir);
                 write_guard.set_available(!partitions_table.is_empty());
+
+                // Invalidate model cache from control display usb service
+                if let Err(err) = invalidate_model_cache().await {
+                    error!("Model cache invalidation error: {err}")
+                }
             }
 
             dirty = false;

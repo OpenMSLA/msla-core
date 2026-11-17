@@ -60,7 +60,7 @@ impl UARTClient {
                     },
                     Ok(None) => continue,
                     Err(err) => {
-                        error!("Failed to read from Uart: {:?}", err);
+                        error!("Failed to read from Uart: {err}");
 
                         match err.kind() {
                             io::ErrorKind::BrokenPipe => {
