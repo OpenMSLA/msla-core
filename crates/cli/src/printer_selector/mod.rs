@@ -120,13 +120,13 @@ pub async fn run_selector(alt_scan: bool, port: u16) -> Result<FoundPrinter> {
                 } else {
                     found.push(printer);
                 }
-
-                found.retain(|p| p._last_updated.elapsed() < Duration::from_secs(10));
-                // If current selected is not retained
-                selected = min(selected, found.len() - 1);
             }
 
             _ = sleep(Duration::from_millis(80)) => {
+                found.retain(|p| p._last_updated.elapsed() < Duration::from_secs(10));
+                // If current selected is not retained
+                selected = min(selected, found.len().saturating_sub(1));
+
                 if event::poll(Duration::ZERO)?
                     && let Event::Key(key) = event::read()? {
 
