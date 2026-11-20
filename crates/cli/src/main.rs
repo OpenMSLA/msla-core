@@ -1,5 +1,5 @@
 use crate::{
-    api::{ApiService, PlacingType},
+    api::ApiService,
     context::{add_to_context, remove_from_context},
     model_info::print_model_info,
     printer_selector::run_selector,
@@ -17,7 +17,7 @@ use msla_core::{
     },
 };
 use notify_rust::{Notification, Urgency};
-use std::{path::PathBuf, process};
+use std::process;
 use tracing::{error, info};
 
 mod api;
@@ -150,17 +150,7 @@ async fn execute(args: &Args) -> Result<()> {
 
             match command {
                 Command::Start(start_args) => {
-                    if let Some(local) = &start_args.local {
-                        api_client
-                            .start_print(PlacingType::Local, PathBuf::from(local))
-                            .await?;
-                    } else if let Some(remote) = &start_args.remote {
-                        api_client
-                            .start_print(PlacingType::Remote, PathBuf::from(remote))
-                            .await?;
-                    } else {
-                        error!("Please, specify the file path: --local <path> or --remote <path>")
-                    }
+                    api_client.start_print(start_args.file.clone()).await?;
 
                     println!("Print started! Enjoy the spectacle of printing :)");
                     if start_args.watch {

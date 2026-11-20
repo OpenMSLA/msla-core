@@ -1,8 +1,6 @@
-use clap::{Parser, Subcommand};
+use std::path::PathBuf;
 
-// cli start --zip --local "file.zip"
-// cli start --zip --remote "rem-file.zip"
-// cli start --other-ext --local "file.ext"
+use clap::{Parser, Subcommand};
 
 #[derive(Subcommand, Debug)]
 pub enum Command {
@@ -63,11 +61,7 @@ pub struct ModelInfoArgs {
 
 #[derive(Parser, Debug)]
 pub struct StartArgs {
-    #[arg(long, conflicts_with = "remote", help = "Path to file on printer", conflicts_with_all = ["local"])]
-    pub local: Option<String>,
-
-    #[arg(long, conflicts_with = "local", help = "Path to file on this device", conflicts_with_all = ["remote"])]
-    pub remote: Option<String>,
+    pub file: PathBuf,
 
     #[arg(long, help = "Do not shutdown status")]
     pub watch: bool,

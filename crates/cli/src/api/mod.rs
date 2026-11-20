@@ -8,20 +8,6 @@ use reqwest::{
 };
 use serde_json::{Value, json};
 
-pub enum PlacingType {
-    Local,
-    Remote,
-}
-
-impl PlacingType {
-    pub fn to_str(&self) -> &str {
-        match self {
-            PlacingType::Local => "local",
-            PlacingType::Remote => "remote",
-        }
-    }
-}
-
 pub struct ApiService {
     client: Client,
     pub url: String,
@@ -63,31 +49,20 @@ impl ApiService {
     }
 
     /// Generic start print function
-    pub async fn start_print(&self, placing_type: PlacingType, path: PathBuf) -> Result<()> {
-        let url = format!("{}/start/{}", self.url, placing_type.to_str());
+    pub async fn start_print(&self, path: PathBuf) -> Result<()> {
+        let url = format!("{}/start", self.url);
 
-        let mut form = Form::new();
-        match placing_type {
-            PlacingType::Local => {
-                form = form.part(
-                    "local_file",
-                    Part::text(path.to_string_lossy().into_owned()),
-                )
-            },
-            PlacingType::Remote => {
-                let data = tokio::fs::read(&path)
-                    .await
-                    .map_err(|e| anyhow!("Cannot load file from this machine: {}", e))?;
+        let data = tokio::fs::read(&path)
+            .await
+            .map_err(|e| anyhow!("Cannot load file from this machine: {}", e))?;
 
-                let part = Part::bytes(data).file_name(
-                    path.file_name()
-                        .map(|name| name.to_string_lossy().into_owned())
-                        .unwrap_or_else(|| "file".to_owned()),
-                );
-                form = form.part("file", part)
-            },
-        };
+        let part = Part::bytes(data).file_name(
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "file".to_owned()),
+        );
 
+        let form = Form::new().part("file", part);
         let response = self.client.post(url).multipart(form).send().await?;
 
         if !response.status().is_success() {

@@ -1,6 +1,4 @@
-use std::path::PathBuf;
-
-use actix_multipart::form::{MultipartForm, tempfile::TempFile, text::Text};
+use actix_multipart::form::{MultipartForm, tempfile::TempFile};
 use actix_web::{HttpResponse, Responder, post, web};
 use msla_core::{
     model_parser::load_model_with_ext,
@@ -24,14 +22,11 @@ pub async fn abort_print(state: web::Data<RESTPrinterState>) -> impl Responder {
 struct UploadForm {
     #[multipart(limit = "100MB")]
     file: Option<TempFile>,
-
-    local_file: Option<Text<String>>,
 }
 
-/// Starting a new zip print from local file
-#[post("/start/{placing}")]
+/// Starting a new print
+#[post("/start")]
 pub async fn start_print(
-    path: web::Path<String>,
     state: web::Data<RESTPrinterState>,
     MultipartForm(form): MultipartForm<UploadForm>,
 ) -> impl Responder {
@@ -41,36 +36,12 @@ pub async fn start_print(
         );
     }
 
-    let mut _file_handler = None;
-    let (file, ext) = match path.as_str() {
-        "remote" => {
-            let Some(file) = &form.file else {
-                return HttpResponse::BadRequest()
-                    .json(json!({"message": "You need to pass a file"}));
-            };
-
-            let p = file.file.path().to_path_buf();
-
-            _file_handler = Some(file);
-            (
-                p,
-                file.file_name
-                    .as_ref()
-                    .and_then(|f| f.split('.').next_back()),
-            )
-        },
-        "local" => {
-            let Some(path) = &form.local_file else {
-                return HttpResponse::BadRequest()
-                    .json(json!({"message": "You need to specify file path"}));
-            };
-
-            (PathBuf::from(&path.0), path.0.split('.').next_back())
-        },
-        _ => return HttpResponse::BadRequest().json(json!({"message": "Invalid placing"})),
+    let Some(f) = &form.file else {
+        return HttpResponse::BadRequest().json(json!({"message": "You need to pass a file"}));
     };
 
-    let Some(ext) = ext else {
+    let file = f.file.path().to_path_buf();
+    let Some(ext) = f.file_name.as_ref().and_then(|f| f.split('.').next_back()) else {
         return HttpResponse::BadRequest().json(json!({"message": "Cannot determine model type"}));
     };
 
