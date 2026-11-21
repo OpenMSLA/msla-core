@@ -34,7 +34,7 @@ pub fn build_general_status_response(
 
     match &st {
         PrinterState::Idle => p.write_u8(0),
-        PrinterState::Printing(s) | PrinterState::Paused(s) => {
+        PrinterState::Printing(s) | PrinterState::Paused(s) | PrinterState::Pausing(s) => {
             let current_ir = s.model.ir.get(s.current_ir_index);
             let est = current_ir
                 .map(|ir| ir.estimated_remaining)
@@ -47,6 +47,7 @@ pub fn build_general_status_response(
             match st {
                 PrinterState::Printing(_) => p.write_u8(1),
                 PrinterState::Paused(_) => p.write_u8(2),
+                PrinterState::Pausing(_) => p.write_u8(7),
                 _ => unreachable!(),
             }
 
@@ -68,11 +69,16 @@ pub fn build_general_status_response(
             // full estimated printing time
             p.write_u32(s.model.model_meta.estimated_printing_time as u32);
             // estimated finish time
-            p.write_u32(
-                est.checked_sub(s.current_ir_elapsed.elapsed())
-                    .unwrap_or_default()
-                    .as_secs() as u32,
-            );
+
+            if matches!(st, PrinterState::Printing(_)) {
+                p.write_u32(
+                    est.checked_sub(s.current_ir_elapsed.elapsed())
+                        .unwrap_or_default()
+                        .as_secs() as u32,
+                );
+            } else {
+                p.write_u32(est.as_secs() as u32);
+            }
 
             // total elapsed secs
             p.write_u32(s.total_elapsed.elapsed().as_secs() as u32);

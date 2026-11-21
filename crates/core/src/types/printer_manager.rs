@@ -20,6 +20,7 @@ pub enum PrinterState {
     Idle,
     Printing(PrintingTaskMeta),
     Paused(PrintingTaskMeta),
+    Pausing(PrintingTaskMeta),
     Error(PrintingError),
     Busy,
     Aborted,
@@ -28,12 +29,18 @@ pub enum PrinterState {
     },
 }
 
+pub enum PrinterTaskCommand {
+    Pause,
+    Resume,
+}
+
 impl PrinterState {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Idle => "idle",
             Self::Printing(_) => "printing",
             Self::Paused(_) => "paused",
+            Self::Pausing(_) => "pausing...",
             Self::Error(_) => "error",
             Self::Busy => "busy",
             Self::Aborted => "aborted",

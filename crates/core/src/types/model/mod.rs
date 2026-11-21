@@ -54,12 +54,14 @@ impl Model {
             }
 
             if let PrintingIR::MoveZ(mov) = &mut m.ir {
-                mov._last_pos = pos;
+                mov.before_pos = pos;
 
                 match mov.positioning {
                     StepperPositioning::Absolute => pos = mov.pos,
                     StepperPositioning::Relative => pos += mov.pos,
                 }
+
+                mov.after_pos = pos;
             }
         }
         let mut duration = Duration::ZERO;

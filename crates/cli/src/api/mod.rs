@@ -150,4 +150,40 @@ impl ApiService {
         }
         Ok(())
     }
+
+    /// Pause print
+    pub async fn pause(&self) -> Result<()> {
+        let response = self
+            .client
+            .post(format!("{}/pause", self.url))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let text = response.text().await?;
+            anyhow::bail!(
+                "Cannot send pause signal to printer: {}",
+                Self::extract_field(&text, "message").unwrap_or(text)
+            );
+        }
+        Ok(())
+    }
+
+    /// Resume print
+    pub async fn resume(&self) -> Result<()> {
+        let response = self
+            .client
+            .post(format!("{}/resume", self.url))
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let text = response.text().await?;
+            anyhow::bail!(
+                "Cannot send resume signal to printer: {}",
+                Self::extract_field(&text, "message").unwrap_or(text)
+            );
+        }
+        Ok(())
+    }
 }

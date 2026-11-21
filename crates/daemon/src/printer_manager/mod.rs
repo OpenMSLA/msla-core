@@ -10,11 +10,12 @@ use anyhow::Result;
 use msla_core::types::{
     model::Model,
     peripheral::StepperPositioning,
-    printer_manager::{PrinterCommand, PrinterState, PrintingError},
+    printer_manager::{PrinterCommand, PrinterState, PrinterTaskCommand, PrintingError},
 };
 use std::sync::Arc;
 use tokio::sync::{
     mpsc::{self, Receiver, Sender},
+    oneshot,
     watch::{self, Receiver as ReceiverWatch, Sender as WatchSender},
 };
 use tracing::{error, info};
@@ -29,8 +30,10 @@ pub struct PrinterManager {
     /// State transmitter for other control sources
     state_transmitter: WatchSender<PrinterState>,
 
-    print_task_command_transmitter: Option<Sender<PrinterCommand>>,
+    print_task_command_transmitter: Option<Sender<PrinterTaskCommand>>,
     print_task_state_receiver: Option<ReceiverWatch<PrinterState>>,
+
+    print_task_aborter: Option<oneshot::Sender<()>>,
 
     peripheral_controller: PeripheralController,
     lcd_controller: LCDController,
@@ -53,6 +56,7 @@ impl PrinterManager {
 
             print_task_command_transmitter: None,
             print_task_state_receiver: None,
+            print_task_aborter: None,
         }
     }
 
@@ -71,10 +75,23 @@ impl PrinterManager {
                                 self.state = PrinterState::Error(PrintingError::new(e.to_string()))
                             }
                         },
-                        PrinterCommand::Abort |
-                        PrinterCommand::Pause |
-                        PrinterCommand::Resume =>
-                            self.send_to_print_task(command).await,
+
+                        PrinterCommand::Abort => {
+                            if let Some(tx) = self.print_task_aborter.take() {
+                                let _ = tx.send(());
+                            }
+                        },
+
+                        PrinterCommand::Pause => {
+                            self.send_to_print_task(PrinterTaskCommand::Pause).await;
+                            if let PrinterState::Printing(st) = &self.state {
+                                self.set_and_send_status(PrinterState::Pausing(st.clone()));
+                            }
+                        }
+
+                        PrinterCommand::Resume => {
+                            self.send_to_print_task(PrinterTaskCommand::Resume).await
+                        }
 
                         PrinterCommand::Home if !self.state.is_busy() => {
                             let peripheral = self.peripheral_controller.clone();
@@ -134,7 +151,7 @@ impl PrinterManager {
                             }
 
                             self.state = event;
-                            self.send_status().await;
+                            self.send_status();
                         }
 
                         Err(_) => {
@@ -149,18 +166,20 @@ impl PrinterManager {
 
     /// Create Printer Task and start printing
     async fn start_print(&mut self, model: Arc<Model>) -> Result<()> {
-        let (command_tx, command_rx) = mpsc::channel::<PrinterCommand>(128);
+        let (command_tx, command_rx) = mpsc::channel::<PrinterTaskCommand>(128);
+        let (abort_tx, abort_rx) = oneshot::channel::<()>();
         let (state_tx, state_rx) = watch::channel(PrinterState::Idle);
 
         self.print_task_command_transmitter = Some(command_tx);
         self.print_task_state_receiver = Some(state_rx);
+        self.print_task_aborter = Some(abort_tx);
 
         let per = self.peripheral_controller.clone();
         let lcd = self.lcd_controller.clone();
 
         let mut task = PrinterTask::new(state_tx, model, per, lcd).await?;
         tokio::spawn(async move {
-            task.run(command_rx).await;
+            task.run(command_rx, abort_rx).await;
         });
 
         Ok(())
@@ -171,10 +190,11 @@ impl PrinterManager {
         self.peripheral_controller.reset_client().await;
         self.print_task_command_transmitter = None;
         self.print_task_state_receiver = None;
+        self.print_task_aborter = None;
     }
 
     /// Send command into printing task
-    async fn send_to_print_task(&mut self, task: PrinterCommand) {
+    async fn send_to_print_task(&mut self, task: PrinterTaskCommand) {
         if let Some(tx) = &self.print_task_command_transmitter {
             let _ = tx.send(task).await.map_err(|e| {
                 error!("Cannot send to a print task: {e}");
@@ -185,14 +205,14 @@ impl PrinterManager {
     }
 
     /// Send current status to all external listeners
-    async fn send_status(&mut self) {
-        let _ = self.state_transmitter.send_replace(self.state.clone());
+    fn send_status(&mut self) {
+        self.state_transmitter.send_replace(self.state.clone());
     }
 
     /// Sets current status and send to a channel
-    async fn set_and_send_status(&mut self, status: PrinterState) {
+    fn set_and_send_status(&mut self, status: PrinterState) {
         self.state = status;
-        self.send_status().await;
+        self.send_status();
     }
 
     /// Runs async task and sets Busy state during exec.
@@ -200,7 +220,7 @@ impl PrinterManager {
     where
         F: Future<Output = Result<()>>,
     {
-        self.set_and_send_status(PrinterState::Busy).await;
+        self.set_and_send_status(PrinterState::Busy);
 
         let state = match op.await {
             Ok(_) => PrinterState::Idle,
@@ -210,6 +230,6 @@ impl PrinterManager {
             },
         };
 
-        self.set_and_send_status(state).await;
+        self.set_and_send_status(state);
     }
 }

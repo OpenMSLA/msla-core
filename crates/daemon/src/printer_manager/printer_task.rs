@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, anyhow};
 use std::{sync::Arc, time::Instant};
 
 use crate::{RUNTIME_CONFIG, lcd::LCDController, peripheral::PeripheralController};
@@ -7,11 +7,15 @@ use msla_core::{
     types::{
         model::{Model, ir::PrintingIR},
         peripheral::StepperPositioning,
-        printer_manager::{PrinterCommand, PrinterState, PrintingError, PrintingTaskMeta},
+        printer_manager::{PrinterState, PrinterTaskCommand, PrintingError, PrintingTaskMeta},
     },
 };
 use tokio::{
-    sync::{mpsc::Receiver, watch::Sender},
+    sync::{
+        mpsc::{Receiver, error::TryRecvError},
+        oneshot,
+        watch::Sender,
+    },
     time::sleep,
 };
 use tracing::{debug, error};
@@ -32,6 +36,9 @@ pub struct PrinterTask {
     lcd_controller: LCDController,
 
     z_level_offset: f64,
+
+    /// Latest z position, before pausing (no z offset!)
+    pause_position_context: f64,
 }
 
 impl PrinterTask {
@@ -56,13 +63,18 @@ impl PrinterTask {
             state: PrinterState::Idle,
             current_layer: 0,
             current_ir_index: 0,
+            pause_position_context: 0.0,
             current_ir_elapsed: Instant::now(),
             total_elapsed: Instant::now(),
             z_level_offset: z_offset,
         })
     }
 
-    pub async fn run(&mut self, mut command_receiver: Receiver<PrinterCommand>) {
+    pub async fn run(
+        &mut self,
+        mut command_receiver: Receiver<PrinterTaskCommand>,
+        mut abort_oneshot: oneshot::Receiver<()>,
+    ) {
         self.total_elapsed = Instant::now();
         self.state = PrinterState::Printing(self.build_task_meta());
 
@@ -70,51 +82,70 @@ impl PrinterTask {
             self.current_ir_index = i;
             self.current_ir_elapsed = Instant::now();
 
-            match self.state {
-                PrinterState::Aborted | PrinterState::Error(_) => {
-                    self.send_current_status().await;
-                    return;
-                },
-                PrinterState::Paused(_) =>
-                {
-                    #[allow(clippy::collapsible_match)]
-                    if !self.wait_to_resume(&mut command_receiver).await {
-                        self.send_current_status().await;
-                        self.abort().await;
+            match command_receiver.try_recv() {
+                Ok(PrinterTaskCommand::Pause) => {
+                    self.state = PrinterState::Paused(self.build_task_meta());
+
+                    if let Err(e) = self.abort_peripherals(true).await {
+                        self.set_error_state(anyhow!("Cannot pause printer: {e}"));
+                        self.emergency_stop().await;
+
                         return;
                     }
+
+                    self.send_current_status();
+
+                    tokio::select! {
+                        resume = self.wait_to_resume(&mut command_receiver) => {
+                            if let Err(e) = resume {
+                                self.set_error_state(e);
+                                self.emergency_stop().await;
+                                return;
+                            }
+
+                            if let Err(e) = self.resume_peripherals().await {
+                                self.set_error_state(e);
+                                self.emergency_stop().await;
+                                return;
+                            }
+                        }
+
+                        _ = &mut abort_oneshot => {
+                            self.abort().await;
+                            return;
+                        }
+                    }
                 },
+
+                Err(TryRecvError::Empty) => {},
+                Err(TryRecvError::Disconnected) => {
+                    error!("Printer Task has lost external control!");
+                    self.emergency_stop().await;
+
+                    return;
+                },
+
                 _ => {},
             }
 
             let command = self.printing_model.ir[i].clone();
             self.state = PrinterState::Printing(self.build_task_meta());
-            self.send_current_status().await;
+            self.send_current_status();
 
             tokio::select! {
                 result = self.execute_next_step(command.ir) => {
                     if let Err(e) = result {
-                        self.state = PrinterState::Error(e);
-                        self.send_current_status().await;
+                        self.set_error_state(e);
+                        self.emergency_stop().await;
+
                         return;
                     }
 
                 }
 
-                command = command_receiver.recv() => {
-                    match command {
-                        Some(command) => {
-                            if !self.handle_command(command).await {
-                                self.send_current_status().await;
-                                return;
-                            }
-                        }
-
-                        None => {
-                            error!("Printer Task has lost external control!");
-                            return;
-                        }
-                    }
+                _ = &mut abort_oneshot => {
+                    self.abort().await;
+                    return;
                 }
             }
         }
@@ -122,7 +153,7 @@ impl PrinterTask {
         self.state = PrinterState::Finished {
             total_elapsed: self.total_elapsed,
         };
-        self.send_current_status().await;
+        self.send_current_status();
     }
 
     async fn execute_next_step(&mut self, command: PrintingIR) -> Result<(), PrintingError> {
@@ -133,6 +164,8 @@ impl PrinterTask {
                     .home_z(self.z_level_offset)
                     .await
                     .map_err(|e| PrintingError::new(format!("Cannot home Z axis: {e}")))?;
+
+                self.pause_position_context = 0.0;
             },
 
             PrintingIR::MoveZ(mov) => {
@@ -147,6 +180,8 @@ impl PrinterTask {
                     .move_z_to(pos, mov.speed, mov.positioning)
                     .await
                     .map_err(|e| PrintingError::new(format!("Cannot move Z axis: {e}")))?;
+
+                self.pause_position_context = mov.after_pos;
             },
 
             PrintingIR::TurnUV(state) => {
@@ -158,10 +193,11 @@ impl PrinterTask {
             },
 
             PrintingIR::ShowImage(path_buf) => {
-                self.current_layer += 1;
                 self.lcd_controller
                     .show_image(self.printing_model.working_dir.path().join(path_buf))
                     .map_err(|e| PrintingError::new(format!("Cannot display image: {e}")))?;
+
+                self.current_layer += 1;
             },
 
             PrintingIR::Wait(duration) => {
@@ -202,85 +238,29 @@ impl PrinterTask {
     }
 
     /// Send status to printing manager
-    async fn send_current_status(&self) {
-        match self.state_sender.send(self.state.clone()) {
-            Ok(_) => {},
-            Err(e) => error!("Error sending status: {}", e),
-        }
-    }
-
-    /// Stop peripherals
-    async fn abort_peripherals(&mut self) {
-        let peripheral_controller = self.peripheral_controller.clone();
-
-        let config = config::get_config().await;
-        // Disable UV
-        let _ = peripheral_controller.turn_uv(false).await;
-
-        // Tear off the printed material from the film
-        let _ = peripheral_controller
-            .move_z_to(5f64, 40f64, StepperPositioning::Relative)
-            .await;
-
-        // We quickly rise to the top
-        let _ = peripheral_controller
-            .move_z_to(
-                config.physical.machine_height as f64,
-                300f64,
-                StepperPositioning::Absolute,
-            )
-            .await;
-
-        // And... Disable stepper!
-        let _ = peripheral_controller.disable_steppers().await;
+    fn send_current_status(&self) {
+        self.state_sender.send_replace(self.state.clone());
     }
 
     /// Blocks current task until it's resumed or aborted
     ///
     /// Returns `false` if aborted, and `true` if resumed
-    async fn wait_to_resume(&mut self, command_receiver: &mut Receiver<PrinterCommand>) -> bool {
+    async fn wait_to_resume(
+        &self,
+        command_receiver: &mut Receiver<PrinterTaskCommand>,
+    ) -> Result<()> {
         loop {
             match command_receiver.recv().await {
                 Some(c) => match c {
-                    PrinterCommand::Pause => {},
-                    PrinterCommand::Resume => {
-                        self.state = PrinterState::Printing(self.build_task_meta());
-                        return true;
-                    },
-                    PrinterCommand::Abort => {
-                        self.state = PrinterState::Aborted;
-                        return false;
-                    },
-
-                    _ => {},
+                    PrinterTaskCommand::Pause => {},
+                    PrinterTaskCommand::Resume => return Ok(()),
                 },
 
                 None => {
                     error!("Printer Task has lost external control!");
-                    return false;
+                    anyhow::bail!("External control lost");
                 },
             }
-        }
-    }
-
-    /// Handle external command
-    /// Returns `false` if print aborted,
-    /// and `true` if resumed/paused
-    async fn handle_command(&mut self, command: PrinterCommand) -> bool {
-        match command {
-            PrinterCommand::Abort => {
-                self.abort().await;
-                false
-            },
-
-            PrinterCommand::Pause => {
-                self.state = PrinterState::Paused(self.build_task_meta());
-                let _ = self.peripheral_controller.turn_uv(false).await;
-                true
-            },
-
-            PrinterCommand::Resume => true,
-            _ => true,
         }
     }
 
@@ -294,13 +274,80 @@ impl PrinterTask {
         }
     }
 
+    /// Sets error state for printer task
+    fn set_error_state(&mut self, err: impl std::fmt::Display) {
+        self.state = PrinterState::Error(PrintingError::new(err.to_string()));
+        self.send_current_status();
+    }
+
+    /// Abort print and send aborted status
     async fn abort(&mut self) {
         self.state = PrinterState::Busy;
-        self.send_current_status().await;
+        self.send_current_status();
 
-        self.abort_peripherals().await;
+        match self.abort_peripherals(false).await {
+            Ok(_) => self.state = PrinterState::Aborted,
+            Err(e) => {
+                self.state =
+                    PrinterState::Error(PrintingError::new(format!("Cannot abort print: {e}")))
+            },
+        };
 
-        self.state = PrinterState::Aborted;
-        self.send_current_status().await;
+        self.send_current_status();
+    }
+}
+
+impl PrinterTask {
+    /// Stop peripherals
+    async fn abort_peripherals(&mut self, paused: bool) -> Result<()> {
+        let config = config::get_config().await;
+
+        // Disable UV
+        self.peripheral_controller.turn_uv(false).await?;
+
+        // Tear off the printed material from the film
+        self.peripheral_controller
+            .move_z_to(5f64, 40f64, StepperPositioning::Relative)
+            .await?;
+
+        // Then quickly rise to the top
+        self.peripheral_controller
+            .move_z_to(
+                config.physical.machine_height as f64,
+                300f64,
+                StepperPositioning::Absolute,
+            )
+            .await?;
+
+        if !paused {
+            // And... Disable stepper!
+            self.peripheral_controller.disable_steppers().await?;
+        }
+
+        Ok(())
+    }
+
+    /// Emergency stop motor and disable uv
+    async fn emergency_stop(&mut self) {
+        error!("Emergency stop triggered!");
+
+        if let Err(e) = self.peripheral_controller.turn_uv(false).await {
+            error!("Failed to disable UV: {e}");
+        }
+
+        if let Err(e) = self.peripheral_controller.disable_steppers().await {
+            error!("Failed to disable steppers: {e}");
+        }
+    }
+
+    /// Return stepper to a latest pos
+    async fn resume_peripherals(&mut self) -> Result<()> {
+        self.peripheral_controller
+            .move_z_to(
+                self.pause_position_context + self.z_level_offset,
+                50.0,
+                StepperPositioning::Absolute,
+            )
+            .await
     }
 }

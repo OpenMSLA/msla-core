@@ -178,6 +178,22 @@ fn handle_command(
             None
         },
 
+        // pause command
+        42 => {
+            if matches!(&*state.borrow(), &PrinterState::Printing(_)) {
+                let _ = sender.blocking_send(PrinterCommand::Pause);
+            }
+            None
+        },
+
+        // resume command
+        44 => {
+            if matches!(&*state.borrow(), &PrinterState::Paused(_)) {
+                let _ = sender.blocking_send(PrinterCommand::Resume);
+            }
+            None
+        },
+
         // Home command
         56 => {
             if !state.borrow().is_busy() {

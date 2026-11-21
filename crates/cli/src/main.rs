@@ -157,12 +157,22 @@ async fn execute(args: &Args) -> Result<()> {
                         show_status(&api_client, true, 10).await?;
                     }
                 },
+
                 Command::Abort => {
                     api_client.abort().await?;
                     println!("Print aborted");
                 },
-                Command::Pause => todo!(),
-                Command::Resume => todo!(),
+
+                Command::Pause => {
+                    api_client.pause().await?;
+                    println!("Print paused");
+                },
+
+                Command::Resume => {
+                    api_client.resume().await?;
+                    println!("Print resumed");
+                },
+
                 Command::Status(status_args) => {
                     show_status(
                         &api_client,
@@ -171,14 +181,17 @@ async fn execute(args: &Args) -> Result<()> {
                     )
                     .await?;
                 },
+
                 Command::Home => {
                     api_client.home().await?;
                     println!("Printer homing...");
                 },
+
                 Command::DisableStepper => {
                     api_client.disable_stepper().await?;
                     println!("Steppers disabled...");
                 },
+
                 Command::ShowPreview => {
                     info!("Open url: {}/preview", api_client.url)
                 },

@@ -24,8 +24,10 @@ pub enum PrintingIR {
 pub struct ZMoving {
     pub pos: f64,
     pub speed: f64,
-    pub _last_pos: f64,
     pub positioning: StepperPositioning,
+
+    pub before_pos: f64,
+    pub after_pos: f64,
 }
 
 impl ZMoving {
@@ -33,7 +35,8 @@ impl ZMoving {
         Self {
             pos,
             speed,
-            _last_pos: 0.0,
+            before_pos: 0.0,
+            after_pos: 0.0,
             positioning,
         }
     }
@@ -90,7 +93,7 @@ impl TimedIR {
             PrintingIR::MoveZ(m) => {
                 let speed_mm_s = m.speed / 60.0;
                 let accel: f64 = 10.0;
-                let distance = (m.pos - m._last_pos).abs();
+                let distance = (m.pos - m.before_pos).abs();
                 let acceleration_distance = speed_mm_s.powi(2) / accel;
 
                 let secs = if distance >= acceleration_distance {

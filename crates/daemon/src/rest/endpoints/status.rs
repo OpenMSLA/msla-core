@@ -27,7 +27,7 @@ pub async fn get_status(state: web::Data<RESTPrinterState>) -> impl Responder {
     };
 
     match printer_state {
-        PrinterState::Printing(meta) | PrinterState::Paused(meta) => {
+        PrinterState::Printing(meta) | PrinterState::Paused(meta) | PrinterState::Pausing(meta) => {
             let current_ir = meta.model.ir.get(meta.current_ir_index);
             let est = current_ir
                 .map(|ir| ir.estimated_remaining)

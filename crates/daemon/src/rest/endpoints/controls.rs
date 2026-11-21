@@ -2,7 +2,10 @@ use actix_multipart::form::{MultipartForm, tempfile::TempFile};
 use actix_web::{HttpResponse, Responder, post, web};
 use msla_core::{
     model_parser::load_model_with_ext,
-    types::{printer_manager::PrinterCommand, rest::RESTPrinterState},
+    types::{
+        printer_manager::{PrinterCommand, PrinterState},
+        rest::RESTPrinterState,
+    },
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -125,5 +128,33 @@ pub async fn move_to(
         Ok(_) => HttpResponse::Created().json(json!({"message": "Moving command sent"})),
         Err(_) => HttpResponse::InternalServerError()
             .json(json!({"message": "Cannot send moving signal"})),
+    }
+}
+
+#[post("/pause")]
+pub async fn pause(state: web::Data<RESTPrinterState>) -> impl Responder {
+    if !matches!(&*state.state.borrow(), &PrinterState::Printing(_)) {
+        return HttpResponse::Conflict().json(json!({"message": "Printer not printing!"}));
+    }
+
+    match state.command_tx.send(PrinterCommand::Pause).await {
+        Ok(_) => HttpResponse::Created().json(json!({"message": "Pause signal sent"})),
+        Err(_) => {
+            HttpResponse::InternalServerError().json(json!({"message": "Cannot send pause signal"}))
+        },
+    }
+}
+
+#[post("/resume")]
+pub async fn resume(state: web::Data<RESTPrinterState>) -> impl Responder {
+    if !matches!(&*state.state.borrow(), &PrinterState::Paused(_)) {
+        return HttpResponse::Conflict().json(json!({"message": "Printer not paused!"}));
+    }
+
+    match state.command_tx.send(PrinterCommand::Resume).await {
+        Ok(_) => HttpResponse::Created().json(json!({"message": "Resume signal sent"})),
+        Err(_) => {
+            HttpResponse::InternalServerError().json(json!({"message": "Cannot send resume signal"}))
+        },
     }
 }

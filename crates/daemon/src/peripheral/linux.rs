@@ -6,11 +6,16 @@ use crate::{
 use anyhow::{Result, anyhow};
 use msla_core::types::peripheral::StepperPositioning;
 use std::{sync::Arc, time::Duration};
+use tokio::sync::Mutex;
 use tracing::debug;
 
 #[derive(Clone)]
 pub struct PeripheralController {
     pub uart: Arc<UARTClient>,
+
+    /// Last z pos
+    /// Needed for timeout calculating
+    pub latest_z_pos: Arc<Mutex<f64>>,
 }
 
 impl PeripheralController {
@@ -22,6 +27,7 @@ impl PeripheralController {
                 config.peripheral.uart.clone(),
                 config.peripheral.baud_rate,
             )?)?,
+            latest_z_pos: Arc::new(Mutex::new(0.0)),
         };
 
         controller.init().await?;
@@ -41,6 +47,8 @@ impl PeripheralController {
         self.uart
             .request(UARTPacket::new(56, &[]), Duration::from_secs(150), 3)
             .await?;
+
+        *self.latest_z_pos.lock().await = 0.0;
 
         debug!("Precising Z pos to a {offset}mm...");
         self.move_z_to(offset, 30.0, StepperPositioning::Absolute)
@@ -64,17 +72,20 @@ impl PeripheralController {
             StepperPositioning::Relative => buf.push(1),
         }
 
+        let delta_pos = { *self.latest_z_pos.lock().await - pos }.abs();
+        let timeout = Duration::from_secs_f64((delta_pos / (speed.abs() / 60.0)) + 30.0);
+        debug!("Motor waiting timeout is: {:?}", timeout);
+
         let mut packet = self
             .uart
-            .request(
-                UARTPacket::new(50, &buf),
-                Duration::from_secs_f64((pos.abs() / (speed.abs() / 60.0)) + 30.0),
-                3,
-            )
+            .request(UARTPacket::new(50, &buf), timeout, 3)
             .await?;
 
         match packet.read_u8() {
-            Some(0) => Ok(()),
+            Some(0) => {
+                *self.latest_z_pos.lock().await = pos;
+                Ok(())
+            },
             Some(n) => anyhow::bail!(format!("Peripheral returned error {n}")),
             None => anyhow::bail!(format!("Peripheral returned unknown error")),
         }
