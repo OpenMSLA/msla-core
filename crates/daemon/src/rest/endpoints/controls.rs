@@ -21,7 +21,7 @@ pub async fn abort_print(state: web::Data<RESTPrinterState>) -> impl Responder {
 #[derive(Debug, MultipartForm)]
 struct UploadForm {
     #[multipart(limit = "100MB")]
-    file: Option<TempFile>,
+    file: TempFile,
 }
 
 /// Starting a new print
@@ -36,18 +36,17 @@ pub async fn start_print(
         );
     }
 
-    let Some(f) = &form.file else {
-        return HttpResponse::BadRequest().json(json!({"message": "You need to pass a file"}));
-    };
-
-    let file = f.file.path().to_path_buf();
-    let Some(ext) = f.file_name.as_ref().and_then(|f| f.split('.').next_back()) else {
+    let file = form.file.file.path().to_path_buf();
+    let Some(ext) = form
+        .file
+        .file_name
+        .as_ref()
+        .and_then(|f| f.split('.').next_back())
+    else {
         return HttpResponse::BadRequest().json(json!({"message": "Cannot determine model type"}));
     };
 
-    let model_res = load_model_with_ext(file, ext).await;
-
-    let model = match model_res {
+    let model = match load_model_with_ext(file, ext).await {
         Ok(m) => m,
         Err(e) => {
             return HttpResponse::BadRequest().json(json!({"message": format!("{}", e)}));
