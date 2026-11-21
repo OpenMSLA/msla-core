@@ -1,6 +1,6 @@
 use crate::{
     api::ApiService,
-    context::{add_to_context, remove_from_context},
+    installation::{install, uninstall},
     model_info::print_model_info,
     printer_selector::run_selector,
     status::show_status,
@@ -21,7 +21,7 @@ use std::process;
 use tracing::{error, info};
 
 mod api;
-mod context;
+mod installation;
 mod model_info;
 mod printer_selector;
 mod search;
@@ -86,12 +86,12 @@ async fn main() -> Result<()> {
 
 async fn execute(args: &Args) -> Result<()> {
     match &args.command {
-        Command::ContextRegister => {
-            add_to_context("Send to printer").await?;
+        Command::Install => {
+            install().await?;
             return Ok(());
         },
-        Command::ContextUnregister => {
-            remove_from_context().await?;
+        Command::Uninstall => {
+            uninstall().await?;
             return Ok(());
         },
         Command::ModelInfo(model_info_args) => print_model_info(model_info_args).await?,
@@ -190,8 +190,8 @@ async fn execute(args: &Args) -> Result<()> {
                     println!("Printer start moving...");
                 },
 
-                Command::ContextRegister
-                | Command::ContextUnregister
+                Command::Install
+                | Command::Uninstall
                 | Command::ModelInfo(_)
                 | Command::ChangeConfig(_) => {
                     unreachable!()

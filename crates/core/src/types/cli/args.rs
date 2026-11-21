@@ -28,11 +28,11 @@ pub enum Command {
     /// Show model preview
     ShowPreview,
 
-    /// Add "Send to printer" context option
-    ContextRegister,
+    /// Install CLI
+    Install,
 
-    /// Remove "Send to printer" context option
-    ContextUnregister,
+    /// Uninstall CLI
+    Uninstall,
 
     /// Display model info
     ModelInfo(ModelInfoArgs),

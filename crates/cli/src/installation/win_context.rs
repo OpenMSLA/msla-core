@@ -1,39 +1,14 @@
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use anyhow::{Result, anyhow};
 use dialoguer::{Input, Select, theme::ColorfulTheme};
-use tokio::fs;
-use tracing::info;
+use msla_core::SUPPORTED_FILE_EXTENSIONS;
 use winreg::{RegKey, enums::*};
 
-const APP_FOLDER_NAME: &str = "OpenMSLA";
-const TARGET_EXE_NAME: &str = "msla-cli.exe";
-const EXTENSIONS: [&str; 2] = ["zip", "photon"];
-
-fn get_installed_exe_path() -> Result<PathBuf> {
-    let local_app_data = env::var("LOCALAPPDATA")?;
-    Ok(Path::new(&local_app_data)
-        .join(APP_FOLDER_NAME)
-        .join(TARGET_EXE_NAME))
-}
+use crate::installation::APP_FOLDER_NAME;
 
 /// Add context menu option for print start
-pub async fn add_to_context(label: &str) -> Result<()> {
-    let exe_path = env::current_exe()?;
-    let target_exe = get_installed_exe_path()?;
-    let target_dir = target_exe.parent().ok_or(anyhow!("Error APPDATA path"))?;
-
-    if !target_dir.exists() {
-        fs::create_dir_all(target_dir).await?;
-    }
-
-    if exe_path != target_exe {
-        fs::copy(&exe_path, &target_exe).await?;
-    }
-
+pub async fn add_to_context(exe_path: PathBuf, label: &str) -> Result<()> {
     let search_options = [
         "Use broadcast (default)",
         "Use unicast (slower, but more reliable)",
@@ -52,10 +27,10 @@ pub async fn add_to_context(label: &str) -> Result<()> {
         .map_err(|e| anyhow!("Cannot process scan port: {}", e))?;
 
     let alt_scan = if selection == 1 { "--alt-scan" } else { "" };
-    let target_exe_str = target_exe.to_str().ok_or(anyhow!("Invalid exe path"))?;
+    let target_exe_str = exe_path.to_str().ok_or(anyhow!("Invalid exe path"))?;
 
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    for ext in EXTENSIONS {
+    for ext in SUPPORTED_FILE_EXTENSIONS {
         let key_path = format!(
             r"Software\Classes\SystemFileAssociations\.{}\shell\{}",
             ext, APP_FOLDER_NAME
@@ -74,14 +49,13 @@ pub async fn add_to_context(label: &str) -> Result<()> {
         cmd_key.set_value("", &command)?;
     }
 
-    info!("Menu option is registered!");
     Ok(())
 }
 
 /// Remove file from context menu
 pub async fn remove_from_context() -> Result<()> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
-    for ext in EXTENSIONS {
+    for ext in SUPPORTED_FILE_EXTENSIONS {
         let key_path = format!(
             r"Software\Classes\SystemFileAssociations\.{}\shell\{}",
             ext, APP_FOLDER_NAME
@@ -89,19 +63,5 @@ pub async fn remove_from_context() -> Result<()> {
         let _ = hkcu.delete_subkey_all(&key_path);
     }
 
-    if let Ok(target_exe) = get_installed_exe_path() {
-        let current_exe = env::current_exe().ok();
-
-        if current_exe.as_ref() != Some(&target_exe) {
-            if target_exe.exists() {
-                let _ = fs::remove_file(&target_exe).await;
-            }
-            if let Some(target_dir) = target_exe.parent() {
-                let _ = fs::remove_dir(target_dir).await;
-            }
-        }
-    }
-
-    info!("Menu option is unregistered");
     Ok(())
 }
