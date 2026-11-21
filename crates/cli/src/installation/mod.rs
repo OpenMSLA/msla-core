@@ -30,6 +30,7 @@ use add_to_path::{add_to_path, remove_from_path};
 use anyhow::{Result, anyhow};
 mod add_to_path;
 
+#[cfg(windows)]
 const APP_FOLDER_NAME: &str = "OpenMSLA";
 
 #[cfg(windows)]
