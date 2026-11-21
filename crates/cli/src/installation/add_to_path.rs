@@ -125,7 +125,7 @@ pub async fn add_to_path(path: PathBuf) -> Result<()> {
 }
 
 #[cfg(target_os = "linux")]
-pub async fn remove_from_path(path: &PathBuf) -> Result<()> {
+pub async fn remove_from_path(path: PathBuf) -> Result<()> {
     use anyhow::anyhow;
     use tokio::fs;
 
