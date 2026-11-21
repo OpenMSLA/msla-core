@@ -44,7 +44,7 @@ fn set_console_visible(visible: bool) {
 }
 
 #[cfg(not(windows))]
-fn set_console_visible(visible: bool) {}
+fn set_console_visible(_visible: bool) {}
 
 // --------------------- DYN CONFIG THINGS --------------------
 

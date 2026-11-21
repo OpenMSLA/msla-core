@@ -1,15 +1,13 @@
 #[cfg(target_os = "windows")]
 mod win_context;
 
-use std::env;
-#[cfg(windows)]
-use std::path::Path;
-#[cfg(windows)]
-use std::path::PathBuf;
-
 use anyhow::Error;
 use colored::Colorize;
 use dialoguer::Confirm;
+use std::{
+    env,
+    path::{Path, PathBuf},
+};
 use tokio::fs;
 
 #[cfg(target_os = "windows")]
@@ -19,7 +17,7 @@ use win_context::add_to_context;
 use win_context::remove_from_context;
 
 #[cfg(not(target_os = "windows"))]
-async fn add_to_context(label: &str) -> Result<()> {
+async fn add_to_context(_exe_path: PathBuf, _label: &str) -> Result<()> {
     panic!("Context options not supported on this OS yet")
 }
 
